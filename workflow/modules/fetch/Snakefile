@@ -1,3 +1,8 @@
-# Snakefile for fetch module (keep minimal; include rules).
+# Snakefile for fetch module.
+#
+# This module is designed to be included from the project root Snakefile.
+# The project root Snakefile should define the global default targets.
 
 include: "rules/fetch.smk"
+
+ruleorder: fetch_all > fetch_study

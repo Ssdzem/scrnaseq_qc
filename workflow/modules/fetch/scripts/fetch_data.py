@@ -63,6 +63,10 @@ def read_study_uris(metadata_csv: Path) -> Dict[str, Dict[str, Set[str]]]:
     return studies
 
 
+def list_studies(metadata_csv: Path) -> List[str]:
+    return sorted(read_study_uris(metadata_csv).keys())
+
+
 def _dest_from_url(url: str, outdir: Path) -> Path:
     name = url.rstrip("/").split("/")[-1]
     if not name:
@@ -104,16 +108,14 @@ def cmd_download_study(metadata_csv: Path, out_root: Path, study: str) -> None:
 
 
 def cmd_list_studies(metadata_csv: Path) -> None:
-    studies = read_study_uris(metadata_csv)
-    for s in sorted(studies):
+    for s in list_studies(metadata_csv):
         print(s)
 
 
 def cmd_list_studies_json(metadata_csv: Path) -> None:
     import json
 
-    studies = read_study_uris(metadata_csv)
-    print(json.dumps(sorted(studies)))
+    print(json.dumps(list_studies(metadata_csv)))
 
 
 def main(argv: Optional[List[str]] = None) -> int:

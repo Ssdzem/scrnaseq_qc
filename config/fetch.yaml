@@ -1,0 +1,29 @@
+# Central configuration for the `fetch` module.
+#
+# Keep this file reproducible by using repo-relative paths where possible.
+# You can override any value at runtime via Snakemake's `--configfile`.
+
+paths:
+  # Project root (repo-relative). Used to build all other paths.
+  project_root: "."
+
+  # Metadata CSV used to determine which studies to fetch.
+  metadata_csv: "config/liver_scRNAseq_metadata.merged.csv"
+
+  # Output root directory. Per-study subdirectories are created under here.
+  out_root: "data"
+
+  # Where this module lives (repo-relative).
+  module_dir: "workflow/modules/fetch"
+
+aspera:
+  # For GSA/CNCB downloads like HRA007511.
+  # Fill these paths in on your machine, or set env vars at runtime.
+  #   export ASCP_PATH=/path/to/ascp
+  #   export ASCP_KEY=/path/to/asperaweb_id_dsa.openssh
+  ascp_path: ""
+  key_path: ""
+  port: 33001
+  rate_limit: "100m"
+  host: "aspera01@download.cncb.ac.cn"
+  remote_root: "gsa-human"

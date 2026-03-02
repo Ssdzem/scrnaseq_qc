@@ -1,0 +1,5 @@
+# Snakefile for qc_preproc module (keep minimal; include rules).
+
+include: "rules/qc_preproc.smk"
+
+ruleorder: qc_all > qc_scanpy > rds_to_h5ad

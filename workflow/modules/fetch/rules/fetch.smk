@@ -1,33 +1,46 @@
 import os
+import sys
+from pathlib import Path
 
 
-METADATA_CSV = os.path.expanduser(
-    "~/phd_coding/a1_p1_qc/config/liver_scRNAseq_metadata.merged.csv"
-)
-OUT_ROOT = os.path.expanduser("~/phd_coding/a1_p1_qc/data")
+# `workflow.basedir` is the directory of the top-level Snakefile.
+# In this project layout, that is the project root (`a1_p1_qc/`).
+configfile: os.path.join(workflow.basedir, "config", "fetch.yaml")
 
 
-def list_studies(metadata_csv: str) -> list[str]:
-    import json
-    import subprocess
-
-    cmd = [
-        "python",
-        "scripts/fetch_data.py",
-        "--metadata",
-        metadata_csv,
-        "--out-root",
-        OUT_ROOT,
-        "list-studies-json",
-    ]
-    out = subprocess.check_output(cmd, text=True)
-    return json.loads(out)
+def _norm(path: str) -> str:
+    return os.path.normpath(os.path.expanduser(path))
 
 
-STUDIES = list_studies(METADATA_CSV)
+PROJECT_ROOT = _norm(config.get("paths", {}).get("project_root", workflow.basedir))
 
 
-rule all:
+def _rooted(key: str) -> str:
+    value = config["paths"][key]
+    if os.path.isabs(os.path.expanduser(value)):
+        return _norm(value)
+    return _norm(os.path.join(PROJECT_ROOT, value))
+
+
+MODULE_DIR = _rooted("module_dir")
+sys.path.insert(0, MODULE_DIR)
+
+from scripts.fetch_data import list_studies  # noqa: E402
+
+
+METADATA_CSV = _rooted("metadata_csv")
+OUT_ROOT = _rooted("out_root")
+
+
+if Path(METADATA_CSV).exists():
+    STUDIES = list_studies(Path(METADATA_CSV))
+else:
+    # Allow including this module even if fetch inputs
+    # are not configured/present yet.
+    STUDIES = []
+
+
+rule fetch_all:
     input:
         expand(f"{OUT_ROOT}/{{study}}/.fetch_done", study=STUDIES)
 
@@ -35,12 +48,12 @@ rule all:
 rule fetch_study:
     input:
         metadata=METADATA_CSV,
-        script="scripts/fetch_data.py",
+        script=os.path.join(MODULE_DIR, "scripts", "fetch_data.py"),
     output:
         touch(f"{OUT_ROOT}/{{study}}/.fetch_done"),
     params:
         out_root=OUT_ROOT,
     conda:
-        "env/fetch.yaml"
+        os.path.join(MODULE_DIR, "env", "fetch.yaml")
     shell:
         "python {input.script} --metadata {input.metadata} --out-root {params.out_root} download-study {wildcards.study}"

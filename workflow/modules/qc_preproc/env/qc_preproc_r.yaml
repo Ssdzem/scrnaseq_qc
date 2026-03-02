@@ -1,0 +1,10 @@
+name: qc_preproc_r
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - r-base
+  - r-optparse
+  - r-seurat
+  - r-seuratdisk
+

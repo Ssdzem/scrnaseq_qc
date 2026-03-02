@@ -1,0 +1,30 @@
+# QC configuration for the qc_preproc module.
+# These values are intended to be edited by the user.
+
+qc:
+  # Minimum number of genes detected in a cell.
+  min_genes: 200
+
+  # Minimum total UMI counts in a cell.
+  min_counts: 500
+
+  # Maximum fraction of mitochondrial counts (0-1).
+  max_mito_frac: 0.20
+
+  # Minimum number of cells a gene must be detected in.
+  min_cells_per_gene: 3
+
+  # Whether to keep (True) or drop (False) doublets (if computed).
+  keep_doublets: true
+
+  # If True, infer mitochondrial genes as those starting with "MT-".
+  mito_prefix: "MT-"
+
+  # Optional: if provided, treat these prefixes as mitochondrial too.
+  mito_prefixes_extra: []
+
+inputs:
+  # Which studies to process. If empty, process all directories under data_backup.
+  # Example:
+  # studies: ["GSE202379", "GSE244832"]
+  studies: []

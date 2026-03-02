@@ -1,0 +1,13 @@
+name: qc_preproc_py
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python=3.11
+  - scanpy
+  - anndata
+  - numpy
+  - pandas
+  - scipy
+  - pyyaml
+
