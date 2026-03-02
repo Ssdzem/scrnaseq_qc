@@ -1,0 +1,5 @@
+Patient_ID,Disease_status,SAF_Score,Gender,Age,BMI,Ethnic_group,Notes,Bilirubin_umol_L,ALP_U_L,ALT_U_L,AST_U_L
+30,Healthy control,S0A1F0,M,49,26.16,White British,"Screening biopsy - No MASLD/MASH diagnosis",17,65,46,
+98,Healthy control,S1A1F1,M,57,33.9,Nigerian,"Screening biopsy - No MASLD/MASH diagnosis. Diagnosed with biliary stones",16,45,58,34
+HL1,Healthy control,healthy control,M,38,32,White British,"Reason for liver transplant rejection: Congenital heart disease altered vasculature anatomy and patchy liver perfusion",5,91,28,
+HL2,Healthy control,healthy control,F,74,,White British ethnicity,"Reason for liver transplant rejection: Combination of alcohol intake and liver lesion on hepatic segment 6",11,84,11,

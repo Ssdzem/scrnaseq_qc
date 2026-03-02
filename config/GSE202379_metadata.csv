@@ -1,0 +1,44 @@
+Patient ID,Disease status,SAF Score,Sex,Age,BMI,Ethnic group
+3,MASH w/o cirrhosis,S2A3F1,M,56,38.01,White British
+6,MASH w/o cirrhosis,S2A3F1,M,46,41.86,White British
+7,MASH w/o cirrhosis,S3A4F2,M,47,34.46,White British
+8,MASH w/o cirrhosis,S2A4F3,M,65,32.46,White British
+9,MASH w/o cirrhosis,S2A2F1,M,50,36.68,White British
+11,MASH w/o cirrhosis,S2A4F3,M,63,44.08,White British
+15,MASH w/o cirrhosis,S2A4F3,M,65,44.9,White British
+16,MASH w/o cirrhosis,S1A4F3,F,70,27.41,White British
+19,MASH w/o cirrhosis,S1A4F3,M,76,26.62,White British
+20,MASH w/o cirrhosis,S2A3F3,F,71,48.96,White British
+21,MASH w/o cirrhosis,S2A3F2,M,60,34.46,White British
+48,MASH w/o cirrhosis,S1A2F2,F,44,30.8,White British
+49,MASH w/o cirrhosis,S1A3F2,F,55,31.35,White British
+50,MASH w/o cirrhosis,S3A3F2,M,45,29.5,White British
+52,MASH w/o cirrhosis,S2A2F1,M,49,31.96,White British
+53,MASH w/o cirrhosis,S2A4F3,M,57,28.37,White British
+54,MASH w/o cirrhosis,S3A3F2,F,61,37.73,White British
+57,MASH w/o cirrhosis,S2A3F2,F,53,38.94,White British
+62,MASH w/o cirrhosis,S2A3F3,M,60,34.41,White British
+64,MASH w/o cirrhosis,S3A3F1,F,55,37.41,White British
+67,MASH w/o cirrhosis,S2A2F3,F,67,28.83,White British
+70,MASH w/o cirrhosis,S2A3F3,M,59,35.49,White British
+71,MASH w/o cirrhosis,S2A4F2,F,32,42.79,White British
+72,MASH w/o cirrhosis,S2A3F3,M,41,33.16,White British
+73,MASH w/o cirrhosis,S2A3F1,F,59,37.08,White British
+76,MASH w/o cirrhosis,S1A3F2,M,55,34.81,White British
+77,MASH w/o cirrhosis,S1A3F2,F,62,31.25,White British
+83,MASH w/o cirrhosis,S2A4F2,M,56,33.5,White British
+12,MASH with cirrhosis,S2A3F4,F,48,45.9,White British
+22,MASH with cirrhosis,S1A3F4,M,55,29.4,other white background (Portugal)
+68,MASH with cirrhosis,S1A3F4,F,66,42.91,White British
+75,MASH with cirrhosis,S1A3F4,M,60,37.49,White British
+51,MASLD,S1A1F1,M,57,38.84,White British
+55,MASLD,S1A1F2,M,21,45.14,White British
+56,MASLD,S1A1F1,F,47,42.95,White British
+60,MASLD,S1A1F0,M,53,33.53,White British
+78,MASLD,S1A1F0,M,53,32.48,White British
+84,MASLD,S1A0F3,M,56,28,White British
+CL103,end stage,end stage,M,59,43.57,White British
+CL104,end stage,end stage,F,59,32,White British
+CL17,end stage,end stage,M,72,26.36,White British
+CL18,end stage,end stage,F,68,30.13,White British
+CL16,end stage,end stage,M,63,53,White British

@@ -1,0 +1,3 @@
+# Snakefile for fetch module (keep minimal; include rules).
+
+include: "rules/fetch.smk"
