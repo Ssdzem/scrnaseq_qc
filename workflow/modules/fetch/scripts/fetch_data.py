@@ -76,14 +76,29 @@ def _dest_from_url(url: str, outdir: Path) -> Path:
 
 def _curl_download(url: str, dest: Path) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
+
+    # If a previous attempt created an empty file, remove it so curl can resume
+    # cleanly.
+    try:
+        if dest.exists() and dest.stat().st_size == 0:
+            dest.unlink()
+    except OSError:
+        pass
+
     cmd = [
         "curl",
         "-L",
         "--fail",
         "--retry",
-        "3",
+        # Large GEO downloads occasionally fail mid-transfer; be more patient.
+        "10",
         "--retry-delay",
         "2",
+        "--retry-all-errors",
+        "--connect-timeout",
+        "30",
+        "--max-time",
+        "0",
         "-C",
         "-",
         "-o",

@@ -118,7 +118,7 @@ rule qc_scanpy:
     shell:
         r"""
         mkdir -p $(dirname {log})
-        python workflow/modules/qc_preproc/scripts/qc_scanpy.py \
+        $CONDA_PREFIX/bin/python workflow/modules/qc_preproc/scripts/qc_scanpy.py \
           --study {params.study} \
           --sample {params.sample} \
           --input {input.raw} \

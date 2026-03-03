@@ -122,7 +122,7 @@ def _json_list_arg(value: str) -> list[str]:
         return [value]
 
 
-def main():
+def main(argv: list[str] | None = None):
     p = argparse.ArgumentParser()
     p.add_argument("--study", required=True)
     p.add_argument("--sample", required=True)
@@ -133,7 +133,7 @@ def main():
     p.add_argument("--qc-config", required=True)
     p.add_argument("--output", required=True)
     p.add_argument("--log", default=None)
-    args = p.parse_args()
+    args = p.parse_args(argv)
 
     setup_logging(args.log)
     qc = read_qc_config(args.qc_config)
@@ -195,4 +195,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
