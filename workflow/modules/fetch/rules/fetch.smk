@@ -172,13 +172,13 @@ rule fetch_done_data:
 
 
 # Convenience: allow targeting a single run via
-#   out/<study>/fastqs/<run_id>/.fetch_done
+#   out/<study>/fastqs/<donor_id>/<sample_id>/<run_id>/.fetch_done
 rule fetch_run_data:
     input:
         metadata=METADATA_CSV,
         script=os.path.join(MODULE_DIR, "scripts", "fetch_data.py"),
     output:
-        touch("out/{study,[^/]+}/fastqs/{run_id}/.fetch_done"),
+        touch("out/{study,[^/]+}/fastqs/{donor_id}/{sample_id}/{run_id}/.fetch_done"),
     params:
         out_root="out",
     conda:

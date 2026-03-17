@@ -135,6 +135,12 @@ def _dest_dir(out_root: Path, row: Dict[str, str], data_nature: str) -> Path:
     )
 
 
+def _ensure_run_dir(out_root: Path, row: Dict[str, str], data_nature: str = "fastqs") -> Path:
+    dest_dir = _dest_dir(out_root, row, data_nature)
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    return dest_dir
+
+
 def _dest_from_url(url: str, outdir: Path) -> Path:
     name = url.rstrip("/").split("/")[-1]
     if not name:
@@ -329,7 +335,8 @@ def cmd_download_run(
                             f"Run id mismatch for study {study}: run_id={run_id} but url implies {inferred}: {url}"
                         )
 
-        dest_dir = out_root / study / "fastqs" / run_id
+        # Match the project output hierarchy.
+        dest_dir = _ensure_run_dir(out_root, rows[0], data_nature="fastqs")
         _aspera_download(
             ascp_path=ascp_path,
             key_path=key_path,
