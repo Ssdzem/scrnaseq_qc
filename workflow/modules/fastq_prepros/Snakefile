@@ -1,0 +1,6 @@
+# Snakefile for fastq_prepros module (keep minimal; include rules).
+
+include: "rules/fastq_prepros.smk"
+include: "rules/ref_singleton_hs_ensembl_110.smk"
+
+ruleorder: celescope_ref_all > fastq_prepros_all > celescope_count

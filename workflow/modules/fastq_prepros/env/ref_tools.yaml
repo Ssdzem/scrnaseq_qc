@@ -1,0 +1,7 @@
+name: fastq_prepros_ref_tools
+channels:
+  - conda-forge
+dependencies:
+  - wget
+  - gzip
+

@@ -1,0 +1,35 @@
+# Configuration for the `fastq_prepros` module.
+
+paths:
+  metadata_csv: "config/liver_scRNAseq_metadata_everything.csv"
+  out_root: "out"
+  module_dir: "workflow/modules"
+
+fastq_prepros:
+  studies:
+    - HRA007511
+
+  # Desired output granularity.
+  # - run: one count matrix per run_id
+  # - sample: merge runs per sample_id
+  target_level: run
+
+  # When true, restrict processing to runs/samples that have FASTQs present
+  # under out/<study>/fastqs/...
+  only_existing_inputs: true
+
+  celescope:
+    species: human
+    threads: 16
+    mem_gb: 64
+
+    # Outputs produced by `celescope rna mkref`.
+    star_index: data/aux/ref/hs_ensembl_110/star
+    gtf: data/aux/ref/hs_ensembl_110/Homo_sapiens.GRCh38.110.filtered.gtf
+
+    reference:
+      ref_dir: data/aux/ref/hs_ensembl_110
+      genome_name: Homo_sapiens_ensembl_110_filtered
+      fasta_url: https://ftp.ensembl.org/pub/release-110/fasta/homo_sapiens/dna/Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz
+      gtf_url: https://ftp.ensembl.org/pub/release-110/gtf/homo_sapiens/Homo_sapiens.GRCh38.110.gtf.gz
+

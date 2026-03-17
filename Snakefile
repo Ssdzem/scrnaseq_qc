@@ -5,6 +5,7 @@ from pathlib import Path
 configfile: str(Path(workflow.basedir) / "config" / "qc.yaml")
 
 include: "workflow/modules/fetch/Snakefile"
+include: "workflow/modules/fastq_prepros/Snakefile"
 include: "workflow/modules/standardize/Snakefile"
 include: "workflow/modules/qc_preproc/Snakefile"
 
@@ -16,4 +17,5 @@ include: "workflow/modules/qc_preproc/Snakefile"
 rule all:
     input:
         rules.fetch_all.input,
+        rules.fastq_prepros_all.input,
         rules.qc_all.input,
