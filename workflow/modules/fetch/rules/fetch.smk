@@ -68,10 +68,15 @@ ASPERA_CFG = config.get("aspera", {})
 
 
 def _aspera_enabled() -> bool:
-    val = (ASPERA_CFG.get("enabled") or "").strip()
-    if val == "":
+    val = ASPERA_CFG.get("enabled")
+    if val is None:
         return False
-    return val.lower() in {"1", "true", "yes", "y", "on"}
+    if isinstance(val, bool):
+        return val
+    sval = str(val).strip()
+    if sval == "":
+        return False
+    return sval.lower() in {"1", "true", "yes", "y", "on"}
 
 
 def _aspera_val(key: str, env_key: str, default: str = "") -> str:
