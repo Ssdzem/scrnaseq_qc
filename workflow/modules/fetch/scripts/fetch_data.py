@@ -22,6 +22,7 @@ import csv
 import os
 import re
 import subprocess
+import time
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Set
 
@@ -104,6 +105,8 @@ def _aspera_download(
     dest_dir: Path,
     port: int = 33001,
     rate_limit: str = "100m",
+    retries: int = 5,
+    retry_sleep_seconds: int = 30,
 ) -> None:
     dest_dir.mkdir(parents=True, exist_ok=True)
 
@@ -123,7 +126,29 @@ def _aspera_download(
         src,
         str(dest_dir),
     ]
-    subprocess.run(cmd, check=True)
+
+    # Large transfers can time out (e.g. Error 36). In practice, re-running ascp
+    # typically resumes and completes (-k1). Add retries so snakemake jobs are
+    # robust to transient network hiccups.
+    attempt = 0
+    max_attempts = max(1, retries)
+    while True:
+        try:
+            subprocess.run(cmd, check=True)
+            return
+        except subprocess.CalledProcessError as e:
+            attempt += 1
+            if attempt >= max_attempts:
+                raise
+
+            sleep_for = retry_sleep_seconds * (2 ** (attempt - 1))
+            print(
+                f"[fetch] ascp failed (attempt {attempt}/{max_attempts}) with exit code {e.returncode}; "
+                f"retrying in {sleep_for}s...",
+                flush=True,
+            )
+            time.sleep(sleep_for)
+
 def _dest_dir(out_root: Path, row: Dict[str, str], data_nature: str) -> Path:
     return (
         out_root
