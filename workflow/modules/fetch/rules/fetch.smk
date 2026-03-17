@@ -153,7 +153,7 @@ rule fetch_done_data:
         metadata=METADATA_CSV,
         script=os.path.join(MODULE_DIR, "scripts", "fetch_data.py"),
     output:
-        touch("out/{study}/.fetch_done"),
+        touch("out/{study,[^/]+}/.fetch_done"),
     params:
         out_root="out",
     conda:
@@ -161,6 +161,31 @@ rule fetch_done_data:
     shell:
         (
             "python {input.script} --metadata {input.metadata} --out-root {params.out_root} download-study {wildcards.study} "
+            + ("--aspera " if _aspera_enabled() else "")
+            + ("--ascp-path '" + _aspera_val("ascp_path", "ASCP_PATH") + "' " if _aspera_enabled() else "")
+            + ("--ascp-key '" + _aspera_val("key_path", "ASCP_KEY") + "' " if _aspera_enabled() else "")
+            + ("--aspera-host '" + _aspera_val("host", "ASPERA_HOST") + "' " if _aspera_enabled() else "")
+            + ("--aspera-remote-root '" + _aspera_val("remote_root", "ASPERA_REMOTE_ROOT") + "' " if _aspera_enabled() else "")
+            + ("--aspera-port " + str(ASPERA_CFG.get("port", 33001)) + " " if _aspera_enabled() else "")
+            + ("--aspera-rate '" + str(ASPERA_CFG.get("rate_limit", "100m")) + "'" if _aspera_enabled() else "")
+        )
+
+
+# Convenience: allow targeting a single run via
+#   out/<study>/fastqs/<run_id>/.fetch_done
+rule fetch_run_data:
+    input:
+        metadata=METADATA_CSV,
+        script=os.path.join(MODULE_DIR, "scripts", "fetch_data.py"),
+    output:
+        touch("out/{study,[^/]+}/fastqs/{run_id}/.fetch_done"),
+    params:
+        out_root="out",
+    conda:
+        os.path.join(MODULE_DIR, "env", "fetch.yaml")
+    shell:
+        (
+            "python {input.script} --metadata {input.metadata} --out-root {params.out_root} download-run {wildcards.study} {wildcards.run_id} "
             + ("--aspera " if _aspera_enabled() else "")
             + ("--ascp-path '" + _aspera_val("ascp_path", "ASCP_PATH") + "' " if _aspera_enabled() else "")
             + ("--ascp-key '" + _aspera_val("key_path", "ASCP_KEY") + "' " if _aspera_enabled() else "")
