@@ -1,0 +1,12 @@
+study: "GSE244832"
+process: "count_matrix_10x"
+
+input:
+  matrix: "out/GSE244832/qconly/processed_files/hLIVER_counts.mtx.gz"
+  genes: "out/GSE244832/qconly/processed_files/hLIVER_genes.csv"
+  barcodes: "out/GSE244832/qconly/processed_files/hLIVER_cells.csv"
+  metadata: "out/GSE244832/qconly/processed_files/hLIVER_metadata.csv"
+
+output:
+  h5ad: "out/GSE244832/raw.h5ad"
+

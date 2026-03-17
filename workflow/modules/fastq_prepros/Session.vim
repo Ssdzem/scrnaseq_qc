@@ -4,7 +4,7 @@ let v:this_session=expand("<sfile>:p")
 let R_Nvim_status =  0 
 silent only
 silent tabonly
-cd ~/phd_coding/a1_p1_qc
+cd ~/phd_coding/a1_p1_qc/workflow/modules/fastq_prepros
 if expand('%') == '' && !&modified && line('$') <= 1 && getline(1) == ''
   let s:wipebuf = bufnr('%')
 endif
@@ -14,11 +14,11 @@ if &shortmess =~ 'A'
 else
   set shortmess=aoO
 endif
-badd +1 config/HRA007511_metadata.csv
-badd +5 config/GSE256398_metadata.csv
+badd +1 env/conda_pkgs.txt
 argglobal
 %argdel
-edit config/GSE256398_metadata.csv
+$argadd env/conda_pkgs.txt
+edit env/conda_pkgs.txt
 wincmd t
 let s:save_winminheight = &winminheight
 let s:save_winminwidth = &winminwidth
@@ -27,12 +27,12 @@ set winheight=1
 set winminwidth=0
 set winwidth=1
 argglobal
-let s:l = 5 - ((4 * winheight(0) + 15) / 31)
+let s:l = 1 - ((0 * winheight(0) + 15) / 31)
 if s:l < 1 | let s:l = 1 | endif
 keepjumps exe s:l
 normal! zt
-keepjumps 5
-normal! 03|
+keepjumps 1
+normal! 0
 tabnext 1
 if exists('s:wipebuf') && len(win_findbuf(s:wipebuf)) == 0 && getbufvar(s:wipebuf, '&buftype') isnot# 'terminal'
   silent exe 'bwipe ' . s:wipebuf

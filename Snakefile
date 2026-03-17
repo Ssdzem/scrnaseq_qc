@@ -5,6 +5,7 @@ from pathlib import Path
 configfile: str(Path(workflow.basedir) / "config" / "qc.yaml")
 
 include: "workflow/modules/fetch/Snakefile"
+include: "workflow/modules/standardize/Snakefile"
 include: "workflow/modules/qc_preproc/Snakefile"
 
 

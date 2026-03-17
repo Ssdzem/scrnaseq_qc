@@ -83,7 +83,7 @@ rule fetch_done:
     params:
         out_root=OUT_ROOT,
     conda:
-        "workflow/modules/fetch/env/fetch.yaml"
+        os.path.join(MODULE_DIR, "env", "fetch.yaml")
     shell:
         "python {input.script} --metadata {input.metadata} --out-root {params.out_root} download-study {wildcards.study}"
 
@@ -100,10 +100,10 @@ rule fetch_done_data:
         metadata=METADATA_CSV,
         script=os.path.join(MODULE_DIR, "scripts", "fetch_data.py"),
     output:
-        touch("data/{study}/.fetch_done"),
+        touch("out/{study}/.fetch_done"),
     params:
-        out_root="data",
+        out_root="out",
     conda:
-        "workflow/modules/fetch/env/fetch.yaml"
+        os.path.join(MODULE_DIR, "env", "fetch.yaml")
     shell:
         "python {input.script} --metadata {input.metadata} --out-root {params.out_root} download-study {wildcards.study}"

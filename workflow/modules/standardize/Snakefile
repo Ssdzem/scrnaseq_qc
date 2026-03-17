@@ -1,0 +1,6 @@
+# Snakefile for standardize module (keep minimal; include rules).
+
+include: "rules/standardize.smk"
+
+ruleorder: standardize_all > standardize_study
+

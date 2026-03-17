@@ -1,0 +1,14 @@
+name: a1_p1_qc_standardize
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python=3.11
+  - pip
+  - numpy
+  - pandas
+  - scipy
+  - anndata
+  - scanpy
+  - pyyaml
+

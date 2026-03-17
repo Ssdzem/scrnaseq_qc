@@ -8,10 +8,10 @@ paths:
   project_root: "."
 
   # Metadata CSV used to determine which studies to fetch.
-  metadata_csv: "config/liver_scRNAseq_metadata.merged.csv"
+  metadata_csv: "config/liver_scRNAseq_metadata_everything.csv"
 
   # Output root directory. Per-study subdirectories are created under here.
-  out_root: "data"
+  out_root: "out"
 
   # Where this module lives (repo-relative).
   module_dir: "workflow/modules/fetch"
