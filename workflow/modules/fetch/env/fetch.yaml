@@ -6,3 +6,5 @@ dependencies:
   - python=3.11
   - snakemake
   - curl
+  # Aspera Connect is installed outside conda on most systems.
+  # We call it via an absolute path configured in config/fetch.yaml.

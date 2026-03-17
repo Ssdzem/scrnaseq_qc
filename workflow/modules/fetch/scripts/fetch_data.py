@@ -82,39 +82,48 @@ def list_studies(metadata_csv: Path) -> List[str]:
             studies.add(study)
     return sorted(studies)
 
-    with _open_csv(metadata_csv) as handle:
-        reader = csv.reader(handle)
-        try:
-            raw_headers = next(reader)
-        except StopIteration:
-            raise ValueError(f"Empty CSV: {metadata_csv}")
 
-        headers = [_normalize_header(h) for h in raw_headers]
-        index = {h: i for i, h in enumerate(headers)}
-        required = {"study_accession", "raw_uri", "processed_uri"}
-        missing = required - set(index)
-        if missing:
-            raise ValueError(
-                f"Missing columns {sorted(missing)} in {metadata_csv}. Found: {headers}"
-            )
+def _truthy(val: Optional[str]) -> bool:
+    return (val or "").strip().lower() in {"1", "true", "yes", "y", "on"}
 
-        studies: Dict[str, Dict[str, Set[str]]] = {}
-        for row in reader:
-            if not row:
-                continue
-            study = (row[index["study_accession"]] or "").strip()
-            if not study:
-                continue
-            raw_uri = (row[index["raw_uri"]] or "").strip()
-            processed_uri = (row[index["processed_uri"]] or "").strip()
 
-            entry = studies.setdefault(study, {"raw": set(), "processed": set()})
-            if raw_uri and raw_uri.lower() != "na":
-                entry["raw"].add(raw_uri)
-            if processed_uri and processed_uri.lower() != "na":
-                entry["processed"].add(processed_uri)
+def _infer_gsa_run_id_from_url(url: str) -> Optional[str]:
+    m = re.search(r"/(HRR\d{6,})/", url)
+    if m:
+        return m.group(1)
+    return None
 
-    return studies
+
+def _aspera_download(
+    ascp_path: str,
+    key_path: str,
+    host: str,
+    remote_root: str,
+    study: str,
+    run_id: str,
+    dest_dir: Path,
+    port: int = 33001,
+    rate_limit: str = "100m",
+) -> None:
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    # Trailing slash on source is important: it downloads directory contents.
+    src = f"{host}:{remote_root}/{study}/{run_id}/"
+    cmd = [
+        ascp_path,
+        "-P",
+        str(port),
+        "-i",
+        key_path,
+        "-QT",
+        "-l",
+        rate_limit,
+        "-k1",
+        "-d",
+        src,
+        str(dest_dir),
+    ]
+    subprocess.run(cmd, check=True)
 def _dest_dir(out_root: Path, row: Dict[str, str], data_nature: str) -> Path:
     return (
         out_root
@@ -197,12 +206,157 @@ def _curl_download(url: str, dest: Path) -> None:
     subprocess.run(cmd, check=True)
 
 
-def cmd_download_study(metadata_csv: Path, out_root: Path, study: str) -> None:
+def _resolve_aspera_param(val: str, env_key: str) -> str:
+    if (val or "").strip():
+        return os.path.expanduser(val)
+    return os.path.expanduser(os.environ.get(env_key, ""))
+
+
+def cmd_download_study(
+    metadata_csv: Path,
+    out_root: Path,
+    study: str,
+    use_aspera: bool = False,
+    ascp_path: str = "",
+    key_path: str = "",
+    aspera_host: str = "",
+    aspera_remote_root: str = "",
+    aspera_port: int = 33001,
+    aspera_rate_limit: str = "100m",
+) -> None:
     rows = [r for r in read_rows(metadata_csv) if r.get("study_accession") == study]
     if not rows:
         raise SystemExit(
             f"Study '{study}' not found in {metadata_csv}. Available: {list_studies(metadata_csv)}"
         )
+
+    if use_aspera:
+        if not ascp_path or not key_path:
+            raise SystemExit(
+                "Aspera requested but ascp/key paths missing. "
+                "Set them in config/fetch.yaml or env vars ASCP_PATH/ASCP_KEY."
+            )
+        if not Path(ascp_path).exists():
+            raise SystemExit(f"ascp not found: {ascp_path}")
+        if not Path(key_path).exists():
+            raise SystemExit(f"Aspera key not found: {key_path}")
+        if not aspera_host:
+            raise SystemExit("Aspera host missing (config.aspera.host)")
+        if not aspera_remote_root:
+            raise SystemExit("Aspera remote_root missing (config.aspera.remote_root)")
+
+        run_ids: Set[str] = set()
+        for row in rows:
+            rid = (row.get("run_id") or "").strip()
+            if not rid or _is_missing(rid):
+                continue
+            run_ids.add(rid)
+            for col in ("fastq_r1", "fastq_r2"):
+                url = (row.get(col) or "").strip()
+                if not _is_missing(url):
+                    inferred = _infer_gsa_run_id_from_url(url)
+                    if inferred and inferred != rid:
+                        raise SystemExit(
+                            f"Run id mismatch for study {study}: metadata run_id={rid} but url implies {inferred}: {url}"
+                        )
+
+        if not run_ids:
+            raise SystemExit(f"No run_id values found for study {study}; cannot use Aspera")
+
+        # Download per-run directories; snakemake parallelism can schedule
+        # multiple runs at once.
+        for rid in sorted(run_ids):
+            dest_dir = out_root / study / "fastqs" / rid
+            _aspera_download(
+                ascp_path=ascp_path,
+                key_path=key_path,
+                host=aspera_host,
+                remote_root=aspera_remote_root,
+                study=study,
+                run_id=rid,
+                dest_dir=dest_dir,
+                port=aspera_port,
+                rate_limit=aspera_rate_limit,
+            )
+        return
+
+
+def cmd_download_run(
+    metadata_csv: Path,
+    out_root: Path,
+    study: str,
+    run_id: str,
+    use_aspera: bool = False,
+    ascp_path: str = "",
+    key_path: str = "",
+    aspera_host: str = "",
+    aspera_remote_root: str = "",
+    aspera_port: int = 33001,
+    aspera_rate_limit: str = "100m",
+) -> None:
+    rows = [
+        r
+        for r in read_rows(metadata_csv)
+        if r.get("study_accession") == study and (r.get("run_id") or "").strip() == run_id
+    ]
+    if not rows:
+        raise SystemExit(
+            f"Run '{run_id}' for study '{study}' not found in {metadata_csv}."
+        )
+
+    if use_aspera:
+        if not ascp_path or not key_path:
+            raise SystemExit(
+                "Aspera requested but ascp/key paths missing. "
+                "Set them in config/fetch.yaml or env vars ASCP_PATH/ASCP_KEY."
+            )
+        if not Path(ascp_path).exists():
+            raise SystemExit(f"ascp not found: {ascp_path}")
+        if not Path(key_path).exists():
+            raise SystemExit(f"Aspera key not found: {key_path}")
+        if not aspera_host:
+            raise SystemExit("Aspera host missing (config.aspera.host)")
+        if not aspera_remote_root:
+            raise SystemExit("Aspera remote_root missing (config.aspera.remote_root)")
+
+        for row in rows:
+            for col in ("fastq_r1", "fastq_r2"):
+                url = (row.get(col) or "").strip()
+                if not _is_missing(url):
+                    inferred = _infer_gsa_run_id_from_url(url)
+                    if inferred and inferred != run_id:
+                        raise SystemExit(
+                            f"Run id mismatch for study {study}: run_id={run_id} but url implies {inferred}: {url}"
+                        )
+
+        dest_dir = out_root / study / "fastqs" / run_id
+        _aspera_download(
+            ascp_path=ascp_path,
+            key_path=key_path,
+            host=aspera_host,
+            remote_root=aspera_remote_root,
+            study=study,
+            run_id=run_id,
+            dest_dir=dest_dir,
+            port=aspera_port,
+            rate_limit=aspera_rate_limit,
+        )
+        return
+
+    seen: Set[tuple[str, Path]] = set()
+    for row in rows:
+        for data_nature, cols in DATA_COLUMNS.items():
+            for col in cols:
+                url = (row.get(col) or "").strip()
+                if _is_missing(url):
+                    continue
+                dest_dir = _dest_dir(out_root, row, data_nature)
+                dest = _dest_from_url(url, dest_dir)
+                key = (url, dest)
+                if key in seen:
+                    continue
+                seen.add(key)
+                _curl_download(url, dest)
 
     # Precompute a fallback "level" per URL based on how unique it is across
     # different hierarchy keys. This handles study-level links that do not
@@ -277,6 +431,32 @@ def main(argv: Optional[List[str]] = None) -> int:
     sub.add_parser("list-studies-json")
     dl = sub.add_parser("download-study")
     dl.add_argument("study")
+    dl.add_argument(
+        "--aspera",
+        action="store_true",
+        help="Use Aspera Connect (ascp) to download per-run directories",
+    )
+    dl.add_argument("--ascp-path", default="", help="Path to ascp (or env ASCP_PATH)")
+    dl.add_argument("--ascp-key", default="", help="Path to Aspera SSH key (or env ASCP_KEY)")
+    dl.add_argument("--aspera-host", default="", help="e.g. aspera01@download.cncb.ac.cn")
+    dl.add_argument("--aspera-remote-root", default="", help="e.g. gsa-human")
+    dl.add_argument("--aspera-port", type=int, default=33001)
+    dl.add_argument("--aspera-rate", default="100m")
+
+    dr = sub.add_parser("download-run")
+    dr.add_argument("study")
+    dr.add_argument("run_id")
+    dr.add_argument(
+        "--aspera",
+        action="store_true",
+        help="Use Aspera Connect (ascp) to download a single run directory",
+    )
+    dr.add_argument("--ascp-path", default="", help="Path to ascp (or env ASCP_PATH)")
+    dr.add_argument("--ascp-key", default="", help="Path to Aspera SSH key (or env ASCP_KEY)")
+    dr.add_argument("--aspera-host", default="", help="e.g. aspera01@download.cncb.ac.cn")
+    dr.add_argument("--aspera-remote-root", default="", help="e.g. gsa-human")
+    dr.add_argument("--aspera-port", type=int, default=33001)
+    dr.add_argument("--aspera-rate", default="100m")
 
     args = parser.parse_args(argv)
     metadata_csv = Path(os.path.expanduser(args.metadata))
@@ -289,7 +469,34 @@ def main(argv: Optional[List[str]] = None) -> int:
         cmd_list_studies_json(metadata_csv)
         return 0
     if args.cmd == "download-study":
-        cmd_download_study(metadata_csv, out_root, args.study)
+        cmd_download_study(
+            metadata_csv,
+            out_root,
+            args.study,
+            use_aspera=args.aspera,
+            ascp_path=_resolve_aspera_param(args.ascp_path, "ASCP_PATH"),
+            key_path=_resolve_aspera_param(args.ascp_key, "ASCP_KEY"),
+            aspera_host=(args.aspera_host or "").strip(),
+            aspera_remote_root=(args.aspera_remote_root or "").strip(),
+            aspera_port=args.aspera_port,
+            aspera_rate_limit=args.aspera_rate,
+        )
+        return 0
+
+    if args.cmd == "download-run":
+        cmd_download_run(
+            metadata_csv,
+            out_root,
+            args.study,
+            args.run_id,
+            use_aspera=args.aspera,
+            ascp_path=_resolve_aspera_param(args.ascp_path, "ASCP_PATH"),
+            key_path=_resolve_aspera_param(args.ascp_key, "ASCP_KEY"),
+            aspera_host=(args.aspera_host or "").strip(),
+            aspera_remote_root=(args.aspera_remote_root or "").strip(),
+            aspera_port=args.aspera_port,
+            aspera_rate_limit=args.aspera_rate,
+        )
         return 0
 
     raise AssertionError("unreachable")
