@@ -23,6 +23,7 @@ import os
 import re
 import subprocess
 import time
+import shlex
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Set
 
@@ -128,6 +129,8 @@ def _aspera_download(
         src,
         str(dest_dir),
     ]
+
+    print(f"[fetch] ascp command: {shlex.join(cmd)}", flush=True)
 
     # Large transfers can time out (e.g. Error 36). In practice, re-running ascp
     # typically resumes and completes (-k1). Add retries so snakemake jobs are
