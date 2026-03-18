@@ -56,9 +56,16 @@ def _rooted(key: str) -> str:
 
 
 MODULE_DIR = _rooted("module_dir")
-sys.path.insert(0, MODULE_DIR)
+# Import helper functions from `scripts/fetch_data.py`.
+#
+# `scripts` is not necessarily a Python package (no __init__.py), so importing
+# it as `scripts.fetch_data` can fail depending on how Snakemake sets up the
+# module search path. Add the scripts directory to sys.path and import the
+# module directly instead.
+SCRIPTS_DIR = os.path.join(MODULE_DIR, "scripts")
+sys.path.insert(0, SCRIPTS_DIR)
 
-from scripts.fetch_data import list_studies  # noqa: E402
+from fetch_data import list_studies  # noqa: E402
 
 
 METADATA_CSV = _rooted("metadata_csv")

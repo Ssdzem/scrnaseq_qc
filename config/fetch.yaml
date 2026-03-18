@@ -26,6 +26,6 @@ aspera:
   ascp_path: "/home/sosad/.aspera/connect/bin/ascp" #your path to ascp
   key_path: "/home/sosad/.aspera/connect/aspera01.openssh" #your path to ssh key downloadable from (https://ngdc.cncb.ac.cn/gsa-human/browse/HRA007511)
   port: 33001 
-  rate_limit: "300m"
+  rate_limit: "100m"
   host: "aspera01@download.cncb.ac.cn"
   remote_root: "gsa-human"

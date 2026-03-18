@@ -105,8 +105,10 @@ def _aspera_download(
     dest_dir: Path,
     port: int = 33001,
     rate_limit: str = "100m",
-    retries: int = 5,
-    retry_sleep_seconds: int = 30,
+    retries: int = 8,
+    retry_sleep_seconds: int = 5,
+    slow_retry_sleep_seconds: int = 45,
+    slow_retries: int = 3,
 ) -> None:
     dest_dir.mkdir(parents=True, exist_ok=True)
 
@@ -131,6 +133,7 @@ def _aspera_download(
     # typically resumes and completes (-k1). Add retries so snakemake jobs are
     # robust to transient network hiccups.
     attempt = 0
+    # Total attempts = 1 initial try + (retries-1) additional tries.
     max_attempts = max(1, retries)
     while True:
         try:
@@ -141,7 +144,13 @@ def _aspera_download(
             if attempt >= max_attempts:
                 raise
 
-            sleep_for = retry_sleep_seconds * (2 ** (attempt - 1))
+            # For quick transient failures, retry quickly at first. If it keeps
+            # failing, switch to slower spacing to cover longer remote outages.
+            quick_attempts = max(0, max_attempts - slow_retries)
+            if attempt < quick_attempts:
+                sleep_for = retry_sleep_seconds
+            else:
+                sleep_for = slow_retry_sleep_seconds
             print(
                 f"[fetch] ascp failed (attempt {attempt}/{max_attempts}) with exit code {e.returncode}; "
                 f"retrying in {sleep_for}s...",
