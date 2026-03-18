@@ -65,7 +65,7 @@ MODULE_DIR = _rooted("module_dir")
 SCRIPTS_DIR = os.path.join(MODULE_DIR, "scripts")
 sys.path.insert(0, SCRIPTS_DIR)
 
-from fetch_data import list_studies  # noqa: E402
+from fetch_data import list_studies, read_rows  # noqa: E402
 
 
 METADATA_CSV = _rooted("metadata_csv")
@@ -93,8 +93,25 @@ def _aspera_val(key: str, env_key: str, default: str = "") -> str:
     return os.environ.get(env_key, default)
 
 
-STUDIES = list_studies(Path(METADATA_CSV))
+ROWS = read_rows(Path(METADATA_CSV))
+assert ROWS, f"No rows parsed from metadata: {METADATA_CSV}"
+
+STUDIES = sorted({r.get("study_accession", "").strip() for r in ROWS if r.get("study_accession")})
 assert STUDIES, f"No studies parsed from metadata: {METADATA_CSV}"
+
+RUNS_BY_STUDY = {}
+TRIPLES_BY_STUDY = {}
+for r in ROWS:
+    study = (r.get("study_accession") or "").strip()
+    run_id = (r.get("run_id") or "").strip()
+    donor_id = (r.get("donor_id") or "").strip()
+    sample_id = (r.get("sample_id") or "").strip()
+    if not study or not run_id:
+        continue
+    RUNS_BY_STUDY.setdefault(study, set()).add(run_id)
+    if donor_id and sample_id:
+        TRIPLES_BY_STUDY.setdefault(study, set()).add((donor_id, sample_id, run_id))
+
 
 
 rule fetch_all:
@@ -157,25 +174,15 @@ rule fetch_run:
 # else (e.g. absolute path). This keeps CLI usage intuitive.
 rule fetch_done_data:
     input:
-        metadata=METADATA_CSV,
-        script=os.path.join(MODULE_DIR, "scripts", "fetch_data.py"),
+        lambda wc: [
+            f"out/{wc.study}/fastqs/{donor_id}/{sample_id}/{run_id}/.fetch_done"
+            for donor_id, sample_id, run_id in sorted(TRIPLES_BY_STUDY.get(wc.study, set()))
+        ]
     output:
         touch("out/{study,[^/]+}/.fetch_done"),
-    params:
-        out_root="out",
     conda:
         os.path.join(MODULE_DIR, "env", "fetch.yaml")
-    shell:
-        (
-            "python {input.script} --metadata {input.metadata} --out-root {params.out_root} download-study {wildcards.study} "
-            + ("--aspera " if _aspera_enabled() else "")
-            + ("--ascp-path '" + _aspera_val("ascp_path", "ASCP_PATH") + "' " if _aspera_enabled() else "")
-            + ("--ascp-key '" + _aspera_val("key_path", "ASCP_KEY") + "' " if _aspera_enabled() else "")
-            + ("--aspera-host '" + _aspera_val("host", "ASPERA_HOST") + "' " if _aspera_enabled() else "")
-            + ("--aspera-remote-root '" + _aspera_val("remote_root", "ASPERA_REMOTE_ROOT") + "' " if _aspera_enabled() else "")
-            + ("--aspera-port " + str(ASPERA_CFG.get("port", 33001)) + " " if _aspera_enabled() else "")
-            + ("--aspera-rate '" + str(ASPERA_CFG.get("rate_limit", "100m")) + "'" if _aspera_enabled() else "")
-        )
+
 
 
 # Convenience: allow targeting a single run via
