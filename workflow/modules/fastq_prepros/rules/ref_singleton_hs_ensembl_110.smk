@@ -4,7 +4,7 @@ from pathlib import Path
 
 REF_CFG = config.get("fastq_prepros", {}).get("celescope", {}).get("reference", {})
 
-REF_DIR = REF_CFG.get("ref_dir", "data/aux/ref/hs_ensembl_110")
+REF_DIR = os.path.normpath(os.path.expanduser(REF_CFG.get("ref_dir", "data/aux/ref/hs_ensembl_110")))
 GENOME_NAME = REF_CFG.get("genome_name", "Homo_sapiens_ensembl_110_filtered")
 
 FASTA_URL = REF_CFG.get(

@@ -41,11 +41,24 @@ def _rooted(key: str) -> str:
     return _norm(os.path.join(PROJECT_ROOT, expanded))
 
 
+def _maybe_relative(key: str) -> str:
+    """Return config path normalized, preserving relativeness.
+
+    For output paths (e.g. out_root), keeping a relative path makes
+    Snakemake targets portable across machines.
+    """
+    value = config["paths"][key]
+    expanded = os.path.expanduser(value)
+    if os.path.isabs(expanded):
+        return _norm(expanded)
+    return _norm(expanded)
+
+
 MODULE_DIR = _rooted("module_dir")
 sys.path.insert(0, MODULE_DIR)
 
 METADATA_CSV = _rooted("metadata_csv")
-OUT_ROOT = _rooted("out_root")
+OUT_ROOT = _maybe_relative("out_root")
 
 
 FASTQ_PREPROS_CFG = config.get("fastq_prepros", {})
@@ -203,4 +216,3 @@ rule celescope_count:
         mem_mb=CELESCOPE_MEM_GB * 1024,
     script:
         "../scripts/run_celescope_multi_rna.py"
-
