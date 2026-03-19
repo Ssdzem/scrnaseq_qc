@@ -214,5 +214,11 @@ rule celescope_count:
         "../env/fastq_prepros.yaml"
     resources:
         mem_mb=CELESCOPE_MEM_GB * 1024,
-    script:
-        "../scripts/run_celescope_multi_rna.py"
+    shell:
+        "python ../scripts/run_celescope_multi_rna.py "
+        "--outdir {params.outdir} "
+        "--sample {params.sample} "
+        "--fastqs {params.fastqs} "
+        "--genome-dir {params.genome_dir} "
+        "--threads {params.threads} "
+        ">> {log} 2>&1"
