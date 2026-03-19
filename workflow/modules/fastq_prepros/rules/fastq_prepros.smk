@@ -215,7 +215,7 @@ rule celescope_count:
     resources:
         mem_mb=CELESCOPE_MEM_GB * 1024,
     shell:
-        "python ../scripts/run_celescope_multi_rna.py "
+        "python workflow/modules/fastq_prepros/scripts/run_celescope_multi_rna.py "
         "--outdir {params.outdir} "
         "--sample {params.sample} "
         "--fastqs {params.fastqs} "
