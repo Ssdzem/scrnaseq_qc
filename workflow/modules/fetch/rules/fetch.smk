@@ -1,4 +1,5 @@
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -93,6 +94,33 @@ def _aspera_val(key: str, env_key: str, default: str = "") -> str:
     return os.environ.get(env_key, default)
 
 
+def _aspera_ascp_path() -> str:
+    """Resolve the ascp binary path.
+
+    Precedence:
+      1) env var ASCP_PATH
+      2) config.aspera.ascp_path
+      3) `shutil.which("ascp")`
+    """
+
+    return (
+        os.environ.get("ASCP_PATH")
+        or (ASPERA_CFG.get("ascp_path") or "").strip()
+        or (shutil.which("ascp") or "")
+    )
+
+
+def _aspera_key_path() -> str:
+    """Resolve the Aspera SSH key path.
+
+    Precedence:
+      1) env var ASCP_KEY
+      2) config.aspera.key_path
+    """
+
+    return os.environ.get("ASCP_KEY") or (ASPERA_CFG.get("key_path") or "").strip()
+
+
 ROWS = read_rows(Path(METADATA_CSV))
 assert ROWS, f"No rows parsed from metadata: {METADATA_CSV}"
 
@@ -133,8 +161,8 @@ rule fetch_done:
         (
             "python {input.script} --metadata {input.metadata} --out-root {params.out_root} download-study {wildcards.study} "
             + ("--aspera " if _aspera_enabled() else "")
-            + ("--ascp-path '" + _aspera_val("ascp_path", "ASCP_PATH") + "' " if _aspera_enabled() else "")
-            + ("--ascp-key '" + _aspera_val("key_path", "ASCP_KEY") + "' " if _aspera_enabled() else "")
+            + ("--ascp-path '" + _aspera_ascp_path() + "' " if _aspera_enabled() else "")
+            + ("--ascp-key '" + _aspera_key_path() + "' " if _aspera_enabled() else "")
             + ("--aspera-host '" + _aspera_val("host", "ASPERA_HOST") + "' " if _aspera_enabled() else "")
             + ("--aspera-remote-root '" + _aspera_val("remote_root", "ASPERA_REMOTE_ROOT") + "' " if _aspera_enabled() else "")
             + ("--aspera-port " + str(ASPERA_CFG.get("port", 33001)) + " " if _aspera_enabled() else "")
@@ -161,8 +189,8 @@ rule fetch_run:
         (
             "python {input.script} --metadata {input.metadata} --out-root {params.out_root} download-run {wildcards.study} {wildcards.run_id} "
             + ("--aspera " if _aspera_enabled() else "")
-            + ("--ascp-path '" + _aspera_val("ascp_path", "ASCP_PATH") + "' " if _aspera_enabled() else "")
-            + ("--ascp-key '" + _aspera_val("key_path", "ASCP_KEY") + "' " if _aspera_enabled() else "")
+            + ("--ascp-path '" + _aspera_ascp_path() + "' " if _aspera_enabled() else "")
+            + ("--ascp-key '" + _aspera_key_path() + "' " if _aspera_enabled() else "")
             + ("--aspera-host '" + _aspera_val("host", "ASPERA_HOST") + "' " if _aspera_enabled() else "")
             + ("--aspera-remote-root '" + _aspera_val("remote_root", "ASPERA_REMOTE_ROOT") + "' " if _aspera_enabled() else "")
             + ("--aspera-port " + str(ASPERA_CFG.get("port", 33001)) + " " if _aspera_enabled() else "")
@@ -201,8 +229,8 @@ rule fetch_run_data:
         (
             "python {input.script} --metadata {input.metadata} --out-root {params.out_root} download-run {wildcards.study} {wildcards.run_id} "
             + ("--aspera " if _aspera_enabled() else "")
-            + ("--ascp-path '" + _aspera_val("ascp_path", "ASCP_PATH") + "' " if _aspera_enabled() else "")
-            + ("--ascp-key '" + _aspera_val("key_path", "ASCP_KEY") + "' " if _aspera_enabled() else "")
+            + ("--ascp-path '" + _aspera_ascp_path() + "' " if _aspera_enabled() else "")
+            + ("--ascp-key '" + _aspera_key_path() + "' " if _aspera_enabled() else "")
             + ("--aspera-host '" + _aspera_val("host", "ASPERA_HOST") + "' " if _aspera_enabled() else "")
             + ("--aspera-remote-root '" + _aspera_val("remote_root", "ASPERA_REMOTE_ROOT") + "' " if _aspera_enabled() else "")
             + ("--aspera-port " + str(ASPERA_CFG.get("port", 33001)) + " " if _aspera_enabled() else "")

@@ -23,8 +23,11 @@ aspera:
   #   export ASCP_KEY=/path/to/asperaweb_id_dsa.openssh
   # Set enabled=true to use Aspera for download-study.
   enabled: true
-  ascp_path: "/home/sosad/.aspera/connect/bin/ascp" #your path to ascp
-  key_path: "/home/sosad/.aspera/connect/aspera01.openssh" #your path to ssh key downloadable from (https://ngdc.cncb.ac.cn/gsa-human/browse/HRA007511)
+  # Optional: set `ascp_path` explicitly, or just ensure `ascp` is on PATH.
+  # Resolution precedence: ASCP_PATH env var > ascp_path config > `which ascp`.
+  ascp_path: ""
+  # Optional: set key path here, or via ASCP_KEY env var.
+  key_path: ""
   port: 33001 
   rate_limit: "100m"
   host: "aspera01@download.cncb.ac.cn"

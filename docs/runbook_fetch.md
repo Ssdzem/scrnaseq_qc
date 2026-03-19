@@ -96,19 +96,43 @@ The fetch module supports two download modes:
 
 To enable Aspera:
 
-1) Edit `config/fetch.yaml` and set:
+1) Ensure `ascp` is available, via one of:
+
+- Put `ascp` on your `PATH` (recommended), or
+- Set `ASCP_PATH` to the full path of the `ascp` binary, or
+- Set `aspera.ascp_path` in `config/fetch.yaml`.
+
+The resolution precedence is:
+
+```text
+ASCP_PATH env var > aspera.ascp_path config > `which ascp`
+```
+
+2) Provide the Aspera SSH key, via one of:
+
+- Set `ASCP_KEY` to the full path of the key file (recommended on shared systems), or
+- Set `aspera.key_path` in `config/fetch.yaml`.
+
+The resolution precedence is:
+
+```text
+ASCP_KEY env var > aspera.key_path config
+```
+
+3) Edit `config/fetch.yaml` and set:
 
 ```yaml
 aspera:
   enabled: true
-  ascp_path: /path/to/ascp
-  key_path: /path/to/key.openssh
+  # Optional if `ascp` is on PATH or ASCP_PATH is set.
+  ascp_path: ""
+  # Optional if ASCP_KEY is set.
+  key_path: ""
 ```
 
-2) Then run the same Snakemake targets as above.
+4) Then run the same Snakemake targets as above.
 
 Notes:
 - Aspera mode downloads per-run directories from:
   `aspera.host:aspera.remote_root/<study>/<run_id>/`
 - Destination directories are created before `ascp` runs.
-
