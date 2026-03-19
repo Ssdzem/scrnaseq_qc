@@ -110,6 +110,7 @@ def _aspera_download(
     retry_sleep_seconds: int = 5,
     slow_retry_sleep_seconds: int = 45,
     slow_retries: int = 3,
+    retry_sleep_schedule_seconds: Optional[List[int]] = None,
 ) -> None:
     dest_dir.mkdir(parents=True, exist_ok=True)
 
@@ -136,8 +137,21 @@ def _aspera_download(
     # typically resumes and completes (-k1). Add retries so snakemake jobs are
     # robust to transient network hiccups.
     attempt = 0
-    # Total attempts = 1 initial try + (retries-1) additional tries.
-    max_attempts = max(1, retries)
+
+    # Custom multi-tier retry schedule: values are the sleep time *before* the
+    # next retry. Total attempts = 1 initial try + len(schedule) retries.
+    if retry_sleep_schedule_seconds is None:
+        # Backwards-compatible default: (retries - slow_retries - 1) quick
+        # retries at 5s, then slow_retries at 45s.
+        max_attempts = max(1, retries)
+        quick_retries = max(0, max_attempts - 1 - max(0, slow_retries))
+        schedule = ([retry_sleep_seconds] * quick_retries) + (
+            [slow_retry_sleep_seconds] * max(0, slow_retries)
+        )
+    else:
+        schedule = list(retry_sleep_schedule_seconds)
+        max_attempts = 1 + len(schedule)
+
     while True:
         try:
             subprocess.run(cmd, check=True)
@@ -147,13 +161,7 @@ def _aspera_download(
             if attempt >= max_attempts:
                 raise
 
-            # For quick transient failures, retry quickly at first. If it keeps
-            # failing, switch to slower spacing to cover longer remote outages.
-            quick_attempts = max(0, max_attempts - slow_retries)
-            if attempt < quick_attempts:
-                sleep_for = retry_sleep_seconds
-            else:
-                sleep_for = slow_retry_sleep_seconds
+            sleep_for = schedule[min(attempt - 1, len(schedule) - 1)]
             print(
                 f"[fetch] ascp failed (attempt {attempt}/{max_attempts}) with exit code {e.returncode}; "
                 f"retrying in {sleep_for}s...",
@@ -308,6 +316,14 @@ def cmd_download_study(
 
         # Download per-run directories; snakemake parallelism can schedule
         # multiple runs at once.
+        retry_schedule = (
+            [5] * 3
+            + [15] * 3
+            + [60] * 3
+            + [360] * 2
+            + [720]
+        )
+
         for rid in sorted(run_ids):
             dest_dir = out_root / study / "fastqs" / rid
             _aspera_download(
@@ -320,6 +336,7 @@ def cmd_download_study(
                 dest_dir=dest_dir,
                 port=aspera_port,
                 rate_limit=aspera_rate_limit,
+                retry_sleep_schedule_seconds=retry_schedule,
             )
         return
 
@@ -374,6 +391,13 @@ def cmd_download_run(
 
         # Match the project output hierarchy.
         dest_dir = _ensure_run_dir(out_root, rows[0], data_nature="fastqs")
+        retry_schedule = (
+            [5] * 3
+            + [15] * 3
+            + [60] * 3
+            + [360] * 2
+            + [720]
+        )
         _aspera_download(
             ascp_path=ascp_path,
             key_path=key_path,
@@ -384,6 +408,7 @@ def cmd_download_run(
             dest_dir=dest_dir,
             port=aspera_port,
             rate_limit=aspera_rate_limit,
+            retry_sleep_schedule_seconds=retry_schedule,
         )
         return
 
