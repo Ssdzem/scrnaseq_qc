@@ -95,7 +95,7 @@ def main() -> int:
         shell_script = outdir / "shell" / f"{args.sample}.sh"
         if not shell_script.exists():
             raise FileNotFoundError(f"Expected CeleScope shell script not found: {shell_script}")
-        subprocess.run(["bash", str(shell_script)], check=True, env=env, cwd=str(outdir))
+        subprocess.run(["bash", shell_script.name], check=True, env=env, cwd=str(shell_script.parent))
     return 0
 
 
