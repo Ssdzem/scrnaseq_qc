@@ -43,7 +43,7 @@ def write_mapfile(mapfile_path: Path, sample: str, fastq_dir: Path) -> None:
     e.g. HRR1782813 for HRR1782813_f1.fastq.gz / HRR1782813_r2.fastq.gz.
     """
 
-    mapfile_path.write_text(f"{sample}\t{fastq_dir}\t{sample}\n")
+    mapfile_path.write_text(f"{sample}\t{fastq_dir.resolve()}\t{sample}\n")
 
 
 def main() -> int:
