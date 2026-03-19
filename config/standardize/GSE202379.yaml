@@ -1,0 +1,9 @@
+study: "GSE202379"
+process: "seurat_rds"
+
+input:
+  rds: "out/GSE202379/qconly/GSE202379_SeuratObject_AllCells.rds"
+
+output:
+  h5ad: "out/GSE202379/raw.h5ad"
+
