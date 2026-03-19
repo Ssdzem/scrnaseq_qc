@@ -28,6 +28,18 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Set
 
 
+def _dir_total_bytes(path: Path) -> int:
+    total = 0
+    for root, _, files in os.walk(path):
+        for name in files:
+            try:
+                total += (Path(root) / name).stat().st_size
+            except OSError:
+                # Files can disappear/change while we traverse.
+                continue
+    return total
+
+
 def _normalize_header(name: str) -> str:
     return re.sub(r"\s+", " ", name).strip()
 
@@ -111,6 +123,10 @@ def _aspera_download(
     slow_retry_sleep_seconds: int = 45,
     slow_retries: int = 3,
     retry_sleep_schedule_seconds: Optional[List[int]] = None,
+    stall_window_seconds: int = 15 * 60,
+    stall_min_bytes: int = 50 * 1024 * 1024,
+    stall_check_interval_seconds: int = 30,
+    term_grace_seconds: int = 10,
 ) -> None:
     dest_dir.mkdir(parents=True, exist_ok=True)
 
@@ -154,8 +170,38 @@ def _aspera_download(
 
     while True:
         try:
-            subprocess.run(cmd, check=True)
-            return
+            proc = subprocess.Popen(cmd)
+
+            last_bytes = _dir_total_bytes(dest_dir)
+            last_progress_at = time.monotonic()
+
+            while True:
+                try:
+                    returncode = proc.wait(timeout=stall_check_interval_seconds)
+                    if returncode != 0:
+                        raise subprocess.CalledProcessError(returncode, cmd)
+                    return
+                except subprocess.TimeoutExpired:
+                    current_bytes = _dir_total_bytes(dest_dir)
+                    if current_bytes >= last_bytes + stall_min_bytes:
+                        last_bytes = current_bytes
+                        last_progress_at = time.monotonic()
+                        continue
+
+                    idle_for = time.monotonic() - last_progress_at
+                    if idle_for >= stall_window_seconds:
+                        print(
+                            f"[fetch] ascp appears stalled: < {stall_min_bytes} bytes in "
+                            f"{stall_window_seconds}s; terminating pid={proc.pid}",
+                            flush=True,
+                        )
+                        proc.terminate()
+                        try:
+                            proc.wait(timeout=term_grace_seconds)
+                        except subprocess.TimeoutExpired:
+                            proc.kill()
+                            proc.wait()
+                        raise subprocess.CalledProcessError(124, cmd)
         except subprocess.CalledProcessError as e:
             attempt += 1
             if attempt >= max_attempts:

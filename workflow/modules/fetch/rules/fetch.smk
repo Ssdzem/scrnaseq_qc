@@ -208,8 +208,6 @@ rule fetch_done_data:
         ]
     output:
         touch("out/{study,[^/]+}/.fetch_done"),
-    conda:
-        os.path.join(MODULE_DIR, "env", "fetch.yaml")
     shell:
         "true"
 
