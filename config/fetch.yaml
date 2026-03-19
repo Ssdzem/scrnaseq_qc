@@ -29,6 +29,6 @@ aspera:
   # Optional: set key path here, or via ASCP_KEY env var.
   key_path: ""
   port: 33001 
-  rate_limit: "100m"
+  rate_limit: "50m"
   host: "aspera01@download.cncb.ac.cn"
   remote_root: "gsa-human"
