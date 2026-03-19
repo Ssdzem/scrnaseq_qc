@@ -54,7 +54,7 @@ def _maybe_relative(key: str) -> str:
     return _norm(expanded)
 
 
-MODULE_DIR = _rooted("module_dir")
+MODULE_DIR = os.path.dirname(os.path.dirname(__file__))
 sys.path.insert(0, MODULE_DIR)
 
 METADATA_CSV = _rooted("metadata_csv")
@@ -211,7 +211,7 @@ rule celescope_count:
     log:
         f"{OUT_ROOT}/logs/fastq_prepros/celescope_count/{{study}}_{{donor_id}}_{{sample_id}}_{{target_id}}.log",
     conda:
-        os.path.join(MODULE_DIR, "env", "fastq_prepros.yaml")
+        "../env/fastq_prepros.yaml"
     resources:
         mem_mb=CELESCOPE_MEM_GB * 1024,
     script:

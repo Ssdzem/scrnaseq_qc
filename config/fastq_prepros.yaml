@@ -3,7 +3,6 @@
 paths:
   metadata_csv: "config/liver_scRNAseq_metadata_everything.csv"
   out_root: "out"
-  module_dir: "workflow/modules"
 
 fastq_prepros:
   studies:
@@ -32,4 +31,3 @@ fastq_prepros:
       genome_name: Homo_sapiens_ensembl_110_filtered
       fasta_url: https://ftp.ensembl.org/pub/release-110/fasta/homo_sapiens/dna/Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz
       gtf_url: https://ftp.ensembl.org/pub/release-110/gtf/homo_sapiens/Homo_sapiens.GRCh38.110.gtf.gz
-
