@@ -70,10 +70,12 @@ def main() -> int:
     fastq_dir = Path(fastqs[0]).parent
     write_mapfile(mapfile, args.sample, fastq_dir)
 
+    # CeleScope resolves paths in the mapfile relative to the working directory.
+    # Therefore, pass a mapfile path relative to `outdir` and run with cwd=outdir.
     cmd = [
         "multi_rna",
         "--mapfile",
-        str(mapfile),
+        mapfile.name,
         "--genomeDir",
         args.genome_dir,
         "--thread",
