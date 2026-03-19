@@ -86,7 +86,14 @@ def main() -> int:
 
     env = os.environ.copy()
     env.setdefault("OMP_NUM_THREADS", str(args.threads))
-    subprocess.run(cmd, check=True, env=env)
+    subprocess.run(cmd, check=True, env=env, cwd=str(outdir))
+
+    if args.mod == "shell":
+        # CeleScope generates shell/{sample}.sh under the working directory.
+        shell_script = outdir / "shell" / f"{args.sample}.sh"
+        if not shell_script.exists():
+            raise FileNotFoundError(f"Expected CeleScope shell script not found: {shell_script}")
+        subprocess.run(["bash", str(shell_script)], check=True, env=env, cwd=str(outdir))
     return 0
 
 
