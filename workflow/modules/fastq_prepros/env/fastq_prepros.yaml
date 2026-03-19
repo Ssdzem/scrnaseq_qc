@@ -3,9 +3,22 @@ channels:
   - conda-forge
   - bioconda
 dependencies:
-  - python=3.10
+  - python=3.9
+  - gcc
+  - leidenalg
+  - igraph
+  - pyarrow
+  - star=2.7.11a
+  - subread=2.0.1
+  - samtools=1.16.1
+  - bcftools=1.16
+  - trust4=1.0.7
+  - igblast
+  - pysam
+  - gatk4
+  - picard
+  - snpeff=5.2
   - pip
   - pandas
   - pip:
       - celescope
-
