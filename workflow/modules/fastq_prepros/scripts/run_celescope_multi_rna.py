@@ -18,22 +18,26 @@ def write_mapfile(mapfile_path: Path, fastqs: list[str], sample: str) -> None:
     e.g. HRR1782813 for HRR1782813_f1.fastq.gz / HRR1782813_r2.fastq.gz.
     """
 
-    # group by directory
+    # Group by directory and derive a prefix compatible with CeleScope's
+    # expected R1 patterns (e.g. <prefix>*_1.fastq.gz, <prefix>*R1_001.fastq.gz).
     per_dir: dict[Path, set[str]] = {}
     for fq in fastqs:
         fq_path = Path(fq)
         per_dir.setdefault(fq_path.parent, set())
         name = fq_path.name
+        # Common forms in this repo:
+        #   <run>_f1.fastq.gz / <run>_r2.fastq.gz
+        # CeleScope expects prefixes that match *_1/*_2 or *R1/*R2.
         if name.endswith("_f1.fastq.gz"):
-            prefix = name.removesuffix("_f1.fastq.gz")
+            prefix = name.removesuffix("_f1.fastq.gz") + "_"
         elif name.endswith("_r2.fastq.gz"):
-            prefix = name.removesuffix("_r2.fastq.gz")
+            prefix = name.removesuffix("_r2.fastq.gz") + "_"
         else:
             prefix = name.split(".", 1)[0]
         per_dir[fq_path.parent].add(prefix)
 
     lines: list[str] = []
-    for fq_dir in sorted(per_dir.keys()):
+    for fq_dir in sorted(per_dir):
         for prefix in sorted(per_dir[fq_dir]):
             lines.append(f"{prefix}\t{fq_dir}\t{sample}")
 
@@ -84,4 +88,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
