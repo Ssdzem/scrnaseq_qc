@@ -44,6 +44,40 @@ def write_mapfile(mapfile_path: Path, fastqs: list[str], sample: str) -> None:
     mapfile_path.write_text("\n".join(lines) + "\n")
 
 
+def _symlink_force(src: Path, dest: Path) -> None:
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    if dest.exists() or dest.is_symlink():
+        dest.unlink()
+    dest.symlink_to(src)
+
+
+def stage_fastqs(outdir: Path, fastqs: list[str], sample: str) -> tuple[list[str], Path, str]:
+    """Stage FASTQs into a CeleScope-friendly naming scheme.
+
+    CeleScope multi expects reads named like *_1/*_2 or *R1/*R2. Many of our
+    inputs are named *_f1/*_r2, which CeleScope does not recognize.
+
+    This creates symlinks under <outdir>/fastq_links/<sample>/ as:
+      <sample>_1.fastq.gz -> original R1
+      <sample>_2.fastq.gz -> original R2
+
+    Returns: (staged_fastqs, staged_dir, library_prefix)
+    """
+
+    r1 = next((Path(p) for p in fastqs if Path(p).name.endswith("_f1.fastq.gz")), None)
+    r2 = next((Path(p) for p in fastqs if Path(p).name.endswith("_r2.fastq.gz")), None)
+    if r1 is None or r2 is None:
+        # Fallback: do not stage; keep original behavior.
+        return fastqs, Path(fastqs[0]).parent, sample
+
+    staged_dir = outdir / "fastq_links" / sample
+    staged_r1 = staged_dir / f"{sample}_1.fastq.gz"
+    staged_r2 = staged_dir / f"{sample}_2.fastq.gz"
+    _symlink_force(r1.resolve(), staged_r1)
+    _symlink_force(r2.resolve(), staged_r2)
+    return [str(staged_r1), str(staged_r2)], staged_dir, sample
+
+
 def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--outdir", required=True)
@@ -64,7 +98,8 @@ def main() -> int:
     mapfile = outdir / "rna.mapfile"
 
     fastqs = [p for p in args.fastqs.split(",") if p.strip()]
-    write_mapfile(mapfile, fastqs, args.sample)
+    fastqs, staged_dir, library_prefix = stage_fastqs(outdir, fastqs, args.sample)
+    write_mapfile(mapfile, fastqs, library_prefix)
 
     cmd = [
         "multi_rna",
