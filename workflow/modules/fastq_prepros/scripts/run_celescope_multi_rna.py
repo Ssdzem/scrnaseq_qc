@@ -15,9 +15,9 @@ def _rename_fastqs_in_place(fastqs: list[str]) -> None:
         fq_path = Path(fq)
         name = fq_path.name
         if name.endswith("_f1.fastq.gz"):
-            target = fq_path.with_name(name.removesuffix("_f1.fastq.gz") + "_1.fastq.gz")
+            target = fq_path.with_name(name.removesuffix("_f1.fastq.gz") + "_1.fq.gz")
         elif name.endswith("_r2.fastq.gz"):
-            target = fq_path.with_name(name.removesuffix("_r2.fastq.gz") + "_2.fastq.gz")
+            target = fq_path.with_name(name.removesuffix("_r2.fastq.gz") + "_2.fq.gz")
         else:
             continue
 
