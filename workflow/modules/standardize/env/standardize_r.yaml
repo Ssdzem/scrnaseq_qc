@@ -1,0 +1,10 @@
+name: a1_p1_qc_standardize_r
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - r-base=4.3
+  - r-seurat
+  - bioconductor-zellkonverter
+  - bioconductor-singlecellexperiment
+  - r-jsonlite

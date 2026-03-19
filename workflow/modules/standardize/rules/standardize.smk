@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 
+import yaml
 
 def _spec_path_for_study(study: str) -> Path:
     return Path("config") / "standardize" / f"{study}.yaml"
@@ -36,7 +37,9 @@ rule standardize_study:
     log:
         "out/logs/standardize/{study}.log"
     conda:
-        "../env/standardize_py.yaml"
+        lambda wc: "../env/standardize_r.yaml"
+        if (yaml.safe_load(open(_spec_path_for_study(wc.study))).get("process") == "seurat_rds")
+        else "../env/standardize_py.yaml"
     shell:
         r"""
         mkdir -p $(dirname {log})

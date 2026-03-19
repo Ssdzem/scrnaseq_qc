@@ -11,4 +11,4 @@ dependencies:
   - anndata
   - scanpy
   - pyyaml
-
+  - h5py
