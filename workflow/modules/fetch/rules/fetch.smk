@@ -124,6 +124,19 @@ def _aspera_key_path() -> str:
 ROWS = read_rows(Path(METADATA_CSV))
 assert ROWS, f"No rows parsed from metadata: {METADATA_CSV}"
 
+
+def _has_fastqs_for_study(study: str) -> bool:
+    for row in ROWS:
+        if (row.get("study_accession") or "").strip() != study:
+            continue
+        r1 = (row.get("fastq_r1") or "").strip()
+        r2 = (row.get("fastq_r2") or "").strip()
+        if r1 and r1.lower() not in {"na", "nd"}:
+            return True
+        if r2 and r2.lower() not in {"na", "nd"}:
+            return True
+    return False
+
 STUDIES = sorted({r.get("study_accession", "").strip() for r in ROWS if r.get("study_accession")})
 assert STUDIES, f"No studies parsed from metadata: {METADATA_CSV}"
 
@@ -139,6 +152,13 @@ for r in ROWS:
     RUNS_BY_STUDY.setdefault(study, set()).add(run_id)
     if donor_id and sample_id:
         TRIPLES_BY_STUDY.setdefault(study, set()).add((donor_id, sample_id, run_id))
+
+
+TRIPLES_BY_STUDY_FASTQS = {
+    study: triples
+    for study, triples in TRIPLES_BY_STUDY.items()
+    if _has_fastqs_for_study(study)
+}
 
 
 
@@ -204,7 +224,9 @@ rule fetch_done_data:
     input:
         lambda wc: [
             f"out/{wc.study}/fastqs/{donor_id}/{sample_id}/{run_id}/.fetch_done"
-            for donor_id, sample_id, run_id in sorted(TRIPLES_BY_STUDY.get(wc.study, set()))
+            for donor_id, sample_id, run_id in sorted(
+                TRIPLES_BY_STUDY_FASTQS.get(wc.study, set())
+            )
         ]
     output:
         touch("out/{study,[^/]+}/.fetch_done"),
