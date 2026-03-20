@@ -30,7 +30,6 @@ rule standardize_all:
 rule standardize_study:
     input:
         spec=lambda wc: str(_spec_path_for_study(wc.study)),
-        unpack_done="out/{study}/.standardize_unpacked.done",
     output:
         h5ad=_study_out_h5ad("{study}"),
     params:
@@ -48,7 +47,6 @@ rule standardize_study:
           --study {params.study} \
           --outdir out \
           --log {log}
-        touch {input.unpack_done}
         $CONDA_PREFIX/bin/python workflow/modules/standardize/scripts/standardize.py \
           --spec {input.spec} \
           --study {params.study} \
