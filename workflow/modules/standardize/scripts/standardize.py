@@ -4,10 +4,6 @@ from pathlib import Path
 
 import yaml
 
-from cleaners.count_matrix_10x import run_count_matrix_10x
-from cleaners.tenx_h5_multi import run_tenx_h5_multi
-from cleaners.seurat_rds import run_seurat_rds
-
 
 def _load_spec(path: str) -> dict:
     with open(path, "r", encoding="utf-8") as handle:
@@ -41,10 +37,16 @@ def main() -> None:
         log.write(json.dumps({"study": args.study, "process": process, "spec": args.spec}) + "\n")
 
         if process == "count_matrix_10x":
+            from cleaners.count_matrix_10x import run_count_matrix_10x
+
             run_count_matrix_10x(study=args.study, study_spec=study_spec, output_h5ad=out_path, log=log)
         elif process == "tenx_h5_multi":
+            from cleaners.tenx_h5_multi import run_tenx_h5_multi
+
             run_tenx_h5_multi(study=args.study, study_spec=study_spec, output_h5ad=out_path, log=log)
         elif process == "seurat_rds":
+            from cleaners.seurat_rds import run_seurat_rds
+
             run_seurat_rds(study=args.study, study_spec=study_spec, output_h5ad=out_path, log=log)
         else:
             raise SystemExit(f"Unknown process '{process}' for study '{args.study}'")
