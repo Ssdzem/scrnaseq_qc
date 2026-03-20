@@ -13,7 +13,7 @@ def _log(msg: str, log: TextIO) -> None:
 
 
 def _is_gzip(path: Path) -> bool:
-    """Return True if `path` looks like a gzip stream by magic bytes."""
+    """Return True if `path` looks like gzip by magic bytes."""
 
     try:
         with path.open("rb") as handle:
@@ -39,6 +39,41 @@ def _safe_extract_tar(*, tar_path: Path, dst_dir: Path, log: TextIO) -> None:
         tf.extractall(dst_dir)
 
     _log(f"Extracted tar: {tar_path} -> {dst_dir}", log)
+
+
+def _maybe_create_top_level_symlink(*, tar_path: Path, log: TextIO) -> None:
+    """Create a convenience symlink for single-folder tarball extractions.
+
+    Many GEO archives are like `<name>.tar.gz` containing `processed_files/...`.
+    In that case extraction yields `<parent>/<name>/processed_files/...`.
+    If so, we create `<parent>/processed_files -> <parent>/<name>/processed_files`.
+    """
+
+    name = tar_path.name
+    archive_stem = name
+    for suffix in (".tar.gz", ".tgz", ".tar"):
+        if archive_stem.endswith(suffix):
+            archive_stem = archive_stem[: -len(suffix)]
+            break
+
+    nested_root = tar_path.parent / archive_stem
+    if not (nested_root.exists() and nested_root.is_dir()):
+        return
+
+    top_level_dirs = [p for p in nested_root.iterdir() if p.is_dir()]
+    if len(top_level_dirs) != 1:
+        return
+
+    top = top_level_dirs[0]
+    link_path = tar_path.parent / top.name
+    if link_path.exists():
+        return
+
+    try:
+        link_path.symlink_to(top, target_is_directory=True)
+        _log(f"Symlink: {link_path} -> {top}", log)
+    except OSError as e:
+        _log(f"WARNING: Failed to create symlink {link_path}: {e}", log)
 
 
 def _gunzip_file(*, gz_path: Path, dst_path: Path, log: TextIO) -> None:
@@ -87,6 +122,7 @@ def _unpack_in_dir(root: Path, *, log: TextIO) -> None:
 
         if name.endswith((".tar", ".tar.gz", ".tgz")):
             _safe_extract_tar(tar_path=path, dst_dir=path.parent, log=log)
+            _maybe_create_top_level_symlink(tar_path=path, log=log)
             continue
 
         if path.suffix == ".gz":
