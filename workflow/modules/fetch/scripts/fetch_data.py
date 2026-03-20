@@ -458,21 +458,6 @@ def cmd_download_run(
         )
         return
 
-    seen: Set[tuple[str, Path]] = set()
-    for row in rows:
-        for data_nature, cols in DATA_COLUMNS.items():
-            for col in cols:
-                url = (row.get(col) or "").strip()
-                if _is_missing(url):
-                    continue
-                dest_dir = _dest_dir(out_root, row, data_nature)
-                dest = _dest_from_url(url, dest_dir)
-                key = (url, dest)
-                if key in seen:
-                    continue
-                seen.add(key)
-                _curl_download(url, dest)
-
     # Precompute a fallback "level" per URL based on how unique it is across
     # different hierarchy keys. This handles study-level links that do not
     # include tokens like sample_id/run_id in the URL.
