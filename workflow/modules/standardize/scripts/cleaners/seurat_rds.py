@@ -28,6 +28,7 @@ def run_seurat_rds(*, study: str, study_spec: dict, output_h5ad: Path, log: Text
         tmpdir = Path(tmp)
         out_h5ad = tmpdir / "converted.h5ad"
         stdout_json = tmpdir / "summary.json"
+        r_file = tmpdir / "convert.R"
 
         r_script = r"""
 args <- commandArgs(trailingOnly=TRUE)
@@ -52,7 +53,7 @@ if (inherits(obj, 'Seurat')) {
   stop(paste('Unsupported R object class:', class(obj)[1]))
 }
 
-zellkonverter::writeH5AD(sce, out_h5ad)
+zellkonverter::writeH5AD(sce, out_h5ad, X_name='counts')
 
 summary <- list(
   n_cells = ncol(sce),
@@ -63,14 +64,9 @@ summary <- list(
 write(toJSON(summary, auto_unbox=TRUE, pretty=TRUE), file=out_json)
 """
 
-        cmd = [
-            "Rscript",
-            "-e",
-            r_script,
-            str(rds_path),
-            str(out_h5ad),
-            str(stdout_json),
-        ]
+        r_file.write_text(r_script, encoding="utf-8")
+
+        cmd = ["Rscript", str(r_file), str(rds_path), str(out_h5ad), str(stdout_json)]
         proc = subprocess.run(cmd, capture_output=True, text=True)
         if proc.returncode != 0:
             log.write(proc.stdout)
