@@ -86,5 +86,5 @@ write(toJSON(summary, auto_unbox=TRUE, pretty=TRUE), file=out_json)
         adata.uns["standardize"] = {"study": study, "process": "seurat_rds"}
 
         log.write(f"[{study}] Writing: {output_h5ad}\n")
+        output_h5ad.parent.mkdir(parents=True, exist_ok=True)
         adata.write_h5ad(output_h5ad)
-

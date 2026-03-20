@@ -4,6 +4,9 @@ channels:
   - bioconda
 dependencies:
   - r-base=4.3
+  - python=3.11
+  - anndata
+  - h5py
   - r-seurat
   - bioconductor-zellkonverter
   - bioconductor-singlecellexperiment
