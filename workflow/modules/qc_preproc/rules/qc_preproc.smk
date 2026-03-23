@@ -34,37 +34,35 @@ def _study_raw_h5ad(study: str) -> str:
     return f"out/{study}/raw.h5ad"
 
 
+def _study_trimmed_h5ad(study: str) -> str:
+    return f"out/{study}/qc/trimmed.h5ad"
+
+
 STUDIES = _studies_to_process()
 
 
 rule qc_all:
     input:
-        expand("out/{study}/qc/qc.h5ad", study=STUDIES),
-        expand("out/{study}/qc/pre_filter_metrics.csv", study=STUDIES),
-        expand(
-            "out/{study}/qc/figures/{fig}",
-            study=STUDIES,
-            fig=[
-                "pre_filter_genes_per_cell.png",
-                "pre_filter_counts_per_cell.png",
-                "pre_filter_mito_pct.png",
-            ],
-        )
+        expand("out/{study}/qc/.pretrim_pictures_done", study=STUDIES),
+        expand("out/{study}/qc/.trimmed_done", study=STUDIES),
+    output:
+        touch(expand("out/{study}/qc/.qc_all_done", study=STUDIES))
 
 
-rule qc_figures:
+rule qc_pretrim_pictures:
     input:
         h5ad=lambda wc: _study_raw_h5ad(wc.study),
         qc_config=QC_CONFIG_PATH,
     output:
         metrics="out/{study}/qc/pre_filter_metrics.csv",
-        genes="out/{study}/qc/figures/pre_filter_genes_per_cell.png",
-        counts="out/{study}/qc/figures/pre_filter_counts_per_cell.png",
-        mito="out/{study}/qc/figures/pre_filter_mito_pct.png",
+        genes="out/{study}/qc/pictures/pre_filter_genes_per_cell.png",
+        counts="out/{study}/qc/pictures/pre_filter_counts_per_cell.png",
+        mito="out/{study}/qc/pictures/pre_filter_mito_pct.png",
+        done=touch("out/{study}/qc/.pretrim_pictures_done"),
     params:
         study=lambda wc: wc.study,
     log:
-        "out/logs/qc_preproc/qc_figures/{study}.log"
+        "out/logs/qc_preproc/qc_pretrim_pictures/{study}.log"
     conda:
         "../env/qc_preproc_py.yaml"
     shell:
@@ -82,11 +80,40 @@ rule qc_figures:
         """
 
 
-rule qc_scanpy:
+rule qc_trim:
     input:
         raw=lambda wc: _study_raw_h5ad(wc.study),
         qc_config=QC_CONFIG_PATH,
         preqc="out/{study}/qc/pre_filter_metrics.csv",
+        pretrim_done="out/{study}/qc/.pretrim_pictures_done",
+    output:
+        trimmed="out/{study}/qc/trimmed.h5ad",
+        done=touch("out/{study}/qc/.trimmed_done"),
+    params:
+        study=lambda wc: wc.study,
+    log:
+        "out/logs/qc_preproc/qc_trim/{study}.log"
+    conda:
+        "../env/qc_preproc_py.yaml"
+    shell:
+        r"""
+        mkdir -p $(dirname {log})
+        $CONDA_PREFIX/bin/python workflow/modules/qc_preproc/scripts/qc_scanpy.py \
+          --study {params.study} \
+          --sample {params.study} \
+          --input {input.raw} \
+          --qc-config {input.qc_config} \
+          --output {output.trimmed} \
+          --log {log}
+        """
+
+
+rule qc_scanpy:
+    input:
+        raw=lambda wc: _study_trimmed_h5ad(wc.study),
+        qc_config=QC_CONFIG_PATH,
+        preqc="out/{study}/qc/pre_filter_metrics.csv",
+        trimmed_done="out/{study}/qc/.trimmed_done",
     output:
         qc_h5="out/{study}/qc/qc.h5ad",
     params:
