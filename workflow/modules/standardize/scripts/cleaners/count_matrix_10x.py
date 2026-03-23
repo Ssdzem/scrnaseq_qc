@@ -187,10 +187,44 @@ def run_count_matrix_10x(*, study: str, study_spec: dict, output_h5ad: Path, log
     # This also avoids Scanpy's sensitivity to mixed compression and prefixes.
     _normalize_10x_triplet_inplace(matrix=matrix, genes=genes, barcodes=barcodes, log=log)
 
-    log.write(f"[{study}] scanpy.read_10x_mtx(dir={matrix.parent})\n")
+    resolved_dir = matrix.parent.resolve()
+    log.write(f"[{study}] 10x resolved dir: {resolved_dir}\n")
+    log.write(f"[{study}] 10x dir exists={resolved_dir.exists()} is_dir={resolved_dir.is_dir()}\n")
+    try:
+        entries = sorted(p.name for p in resolved_dir.iterdir())
+    except Exception as exc:  # noqa: BLE001
+        log.write(f"[{study}] ERROR listing 10x dir: {exc!r}\n")
+        entries = []
+    if entries:
+        log.write(f"[{study}] 10x dir entries ({len(entries)}):\n")
+        for name in entries:
+            log.write(f"[{study}] - {name}\n")
+    else:
+        log.write(f"[{study}] 10x dir entries: <empty or unreadable>\n")
+    log.flush()
+
+    # Scanpy can look for either `genes.tsv.gz` (v2) or `features.tsv.gz` (v3)
+    # depending on version/args. Ensure both exist to avoid FileNotFoundError.
+    genes_tsv = resolved_dir / "genes.tsv.gz"
+    features_tsv = resolved_dir / "features.tsv.gz"
+    if genes_tsv.exists() and not features_tsv.exists():
+        try:
+            shutil.copyfile(genes_tsv, features_tsv)
+            log.write(f"[{study}] Mirrored genes.tsv.gz -> features.tsv.gz\n")
+        except Exception as exc:  # noqa: BLE001
+            log.write(f"[{study}] WARNING: failed creating features.tsv.gz: {exc!r}\n")
+    elif features_tsv.exists() and not genes_tsv.exists():
+        try:
+            shutil.copyfile(features_tsv, genes_tsv)
+            log.write(f"[{study}] Mirrored features.tsv.gz -> genes.tsv.gz\n")
+        except Exception as exc:  # noqa: BLE001
+            log.write(f"[{study}] WARNING: failed creating genes.tsv.gz: {exc!r}\n")
+    log.flush()
+
+    log.write(f"[{study}] scanpy.read_10x_mtx(dir={resolved_dir})\n")
     log.flush()
     adata = sc.read_10x_mtx(
-        str(matrix.parent),
+        str(resolved_dir),
         var_names="gene_symbols",
         make_unique=True,
         # Keep default `compressed=True` and `gex_only=True` per Scanpy docs.
