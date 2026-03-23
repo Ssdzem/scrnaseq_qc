@@ -14,6 +14,11 @@ def _ensure_parent(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
 
 
+def _log(msg: str, log) -> None:
+    log.write(msg.rstrip() + "\n")
+    log.flush()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Standardize study outputs to a canonical .h5ad")
     parser.add_argument("--spec", required=True)
@@ -34,7 +39,8 @@ def main() -> None:
     _ensure_parent(log_path)
 
     with open(log_path, "w", encoding="utf-8") as log:
-        log.write(json.dumps({"study": args.study, "process": process, "spec": args.spec}) + "\n")
+        _log(json.dumps({"study": args.study, "process": process, "spec": args.spec}), log)
+        _log(f"[{args.study}] Starting standardize process={process}", log)
 
         if process == "count_matrix_10x":
             from cleaners.count_matrix_10x import run_count_matrix_10x
@@ -50,6 +56,8 @@ def main() -> None:
             run_seurat_rds(study=args.study, study_spec=study_spec, output_h5ad=out_path, log=log)
         else:
             raise SystemExit(f"Unknown process '{process}' for study '{args.study}'")
+
+        _log(f"[{args.study}] Standardize complete", log)
 
 
 if __name__ == "__main__":

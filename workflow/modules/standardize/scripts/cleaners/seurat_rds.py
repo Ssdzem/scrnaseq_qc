@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import json
-import subprocess
 import tempfile
 from pathlib import Path
 from typing import TextIO
 
 import anndata as ad
+
+from rtlog import run_stream
 
 
 def _require_path(value: str | None, name: str) -> Path:
@@ -67,10 +68,8 @@ write(toJSON(summary, auto_unbox=TRUE, pretty=TRUE), file=out_json)
         r_file.write_text(r_script, encoding="utf-8")
 
         cmd = ["Rscript", str(r_file), str(rds_path), str(out_h5ad), str(stdout_json)]
-        proc = subprocess.run(cmd, capture_output=True, text=True)
-        if proc.returncode != 0:
-            log.write(proc.stdout)
-            log.write(proc.stderr)
+        rc = run_stream(cmd, log=log, prefix=f"[{study}][R] ")
+        if rc != 0:
             raise SystemExit(f"R conversion failed for {study}: {rds_path}")
 
         if stdout_json.exists():

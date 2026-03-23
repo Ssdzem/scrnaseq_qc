@@ -10,6 +10,7 @@ from typing import Iterable, TextIO
 
 def _log(msg: str, log: TextIO) -> None:
     log.write(msg.rstrip() + "\n")
+    log.flush()
 
 
 def _is_gzip(path: Path) -> bool:
@@ -159,4 +160,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

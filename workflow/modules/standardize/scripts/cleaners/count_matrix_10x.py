@@ -181,10 +181,14 @@ def run_count_matrix_10x(*, study: str, study_spec: dict, output_h5ad: Path, log
     metadata_path = inp.get("metadata")
 
     log.write(f"[{study}] Reading MTX triplet\n")
+    log.flush()
 
     # Normalize in-place so downstream always sees a standard 10x directory.
     # This also avoids Scanpy's sensitivity to mixed compression and prefixes.
     _normalize_10x_triplet_inplace(matrix=matrix, genes=genes, barcodes=barcodes, log=log)
+
+    log.write(f"[{study}] scanpy.read_10x_mtx(dir={matrix.parent})\n")
+    log.flush()
     adata = sc.read_10x_mtx(
         str(matrix.parent),
         var_names="gene_symbols",
@@ -192,9 +196,13 @@ def run_count_matrix_10x(*, study: str, study_spec: dict, output_h5ad: Path, log
         # Keep default `compressed=True` and `gex_only=True` per Scanpy docs.
     )
 
+    log.write(f"[{study}] Loaded matrix: n_obs={adata.n_obs} n_vars={adata.n_vars}\n")
+    log.flush()
+
     if metadata_path:
         md = _require_path(metadata_path, "metadata")
         log.write(f"[{study}] Merging metadata: {md}\n")
+        log.flush()
         md_df = pd.read_csv(md)
         # Best-effort merge by barcode/cell.
         key = None
@@ -208,8 +216,10 @@ def run_count_matrix_10x(*, study: str, study_spec: dict, output_h5ad: Path, log
             adata.obs = adata.obs.join(md_df, how="left")
         else:
             log.write(f"[{study}] WARNING: metadata has no obvious barcode column; skipping join\n")
+        log.flush()
 
     adata.uns["standardize"] = {"study": study, "process": "count_matrix_10x"}
 
     log.write(f"[{study}] Writing: {output_h5ad}\n")
+    log.flush()
     adata.write_h5ad(output_h5ad)

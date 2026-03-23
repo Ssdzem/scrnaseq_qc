@@ -43,11 +43,11 @@ rule standardize_study:
     shell:
         r"""
         mkdir -p $(dirname {log})
-        $CONDA_PREFIX/bin/python workflow/modules/standardize/scripts/unpack_inputs.py \
+        $CONDA_PREFIX/bin/python -u workflow/modules/standardize/scripts/unpack_inputs.py \
           --study {params.study} \
           --outdir out \
           --log {log}
-        $CONDA_PREFIX/bin/python workflow/modules/standardize/scripts/standardize.py \
+        $CONDA_PREFIX/bin/python -u workflow/modules/standardize/scripts/standardize.py \
           --spec {input.spec} \
           --study {params.study} \
           --output {output.h5ad} \
