@@ -1,14 +1,9 @@
 import argparse
-import json
 import logging
 from pathlib import Path
 
-import anndata as ad
 import numpy as np
-import pandas as pd
 import scanpy as sc
-import scipy.io
-import scipy.sparse as sp
 import yaml
 
 
@@ -30,52 +25,12 @@ def read_qc_config(path: str) -> dict:
     return cfg.get("qc", {})
 
 
-def read_10x_h5(path: str) -> ad.AnnData:
-    logging.info("Reading 10x h5: %s", path)
-    return sc.read_10x_h5(path)
-
-
-def read_h5ad(path: str) -> ad.AnnData:
+def read_h5ad(path: str):
     logging.info("Reading h5ad: %s", path)
     return sc.read_h5ad(path)
 
 
-def _read_table_1col(path: str) -> np.ndarray:
-    p = Path(path)
-    if p.suffix.lower() in {".tsv", ".txt"}:
-        df = pd.read_csv(path, sep="\t", header=None)
-    else:
-        df = pd.read_csv(path, header=None)
-    return df.iloc[:, 0].astype(str).values
-
-
-def read_mtx(matrix_path: str, genes_path: str, barcodes_path: str) -> ad.AnnData:
-    logging.info("Reading MTX: %s", matrix_path)
-    if str(matrix_path).endswith(".gz"):
-        import gzip
-
-        with gzip.open(matrix_path, "rt") as f:
-            mat = scipy.io.mmread(f)
-    else:
-        mat = scipy.io.mmread(matrix_path)
-
-    if not sp.issparse(mat):
-        mat = sp.csr_matrix(mat)
-    mat = mat.tocsr()
-
-    var_names = _read_table_1col(genes_path)
-    obs_names = _read_table_1col(barcodes_path)
-
-    if mat.shape[0] == len(var_names) and mat.shape[1] == len(obs_names):
-        mat = mat.T
-
-    adata = ad.AnnData(X=mat)
-    adata.var_names = var_names
-    adata.obs_names = obs_names
-    return adata
-
-
-def add_qc_metrics(adata: ad.AnnData, mito_prefix: str, mito_prefixes_extra: list[str]):
+def add_qc_metrics(adata, mito_prefix: str, mito_prefixes_extra: list[str]):
     prefixes = [mito_prefix] + list(mito_prefixes_extra or [])
     mito_mask = np.zeros(adata.n_vars, dtype=bool)
     for prefix in prefixes:
@@ -85,7 +40,7 @@ def add_qc_metrics(adata: ad.AnnData, mito_prefix: str, mito_prefixes_extra: lis
 
 
 def apply_filters(
-    adata: ad.AnnData,
+    adata,
     min_genes: int,
     min_counts: int,
     max_mito_frac: float,
@@ -101,35 +56,17 @@ def apply_filters(
     return adata
 
 
-def write_as_h5(adata: ad.AnnData, output_path: str):
+def write_h5ad(adata, output_path: str):
     out = Path(output_path)
     out.parent.mkdir(parents=True, exist_ok=True)
     logging.info("Writing output: %s", output_path)
     adata.write_h5ad(str(out), compression="gzip")
-
-
-def _json_list_arg(value: str) -> list[str]:
-    if not value:
-        return []
-    try:
-        parsed = json.loads(value)
-        if parsed is None:
-            return []
-        if isinstance(parsed, list):
-            return [str(x) for x in parsed if str(x).strip()]
-        return [str(parsed)]
-    except json.JSONDecodeError:
-        return [value]
-
 
 def main(argv: list[str] | None = None):
     p = argparse.ArgumentParser()
     p.add_argument("--study", required=True)
     p.add_argument("--sample", required=True)
     p.add_argument("--input", required=True)
-    p.add_argument("--genes", default="[]", help="JSON list with 0/1 paths")
-    p.add_argument("--barcodes", default="[]", help="JSON list with 0/1 paths")
-    p.add_argument("--h5ad", default="[]", help="JSON list with 0/1 paths")
     p.add_argument("--qc-config", required=True)
     p.add_argument("--output", required=True)
     p.add_argument("--log", default=None)
@@ -147,25 +84,10 @@ def main(argv: list[str] | None = None):
 
     input_path = args.input
     suffix = Path(input_path).suffix.lower()
+    if suffix != ".h5ad":
+        raise SystemExit(f"qc_scanpy expects .h5ad input, got: {input_path}")
 
-    h5ad_list = _json_list_arg(args.h5ad)
-    genes_list = _json_list_arg(args.genes)
-    barcodes_list = _json_list_arg(args.barcodes)
-
-    h5ad_path = h5ad_list[0] if h5ad_list else ""
-    genes_path = genes_list[0] if genes_list else ""
-    barcodes_path = barcodes_list[0] if barcodes_list else ""
-
-    if h5ad_path:
-        adata = read_h5ad(h5ad_path)
-    elif suffix == ".h5":
-        adata = read_10x_h5(input_path)
-    elif suffix == ".mtx" or input_path.lower().endswith(".mtx.gz"):
-        if not genes_path or not barcodes_path:
-            raise SystemExit("MTX input requires genes+barcodes paths")
-        adata = read_mtx(input_path, genes_path, barcodes_path)
-    else:
-        raise SystemExit(f"Unsupported input format for qc_scanpy: {input_path}")
+    adata = read_h5ad(input_path)
 
     adata.obs["study"] = args.study
     adata.obs["sample_id"] = args.sample
@@ -185,12 +107,9 @@ def main(argv: list[str] | None = None):
         "study": args.study,
         "sample": args.sample,
         "input": args.input,
-        "genes": genes_path,
-        "barcodes": barcodes_path,
-        "h5ad": h5ad_path,
     }
 
-    write_as_h5(adata, args.output)
+    write_h5ad(adata, args.output)
 
 
 if __name__ == "__main__":

@@ -23,8 +23,14 @@ qc:
   # Optional: if provided, treat these prefixes as mitochondrial too.
   mito_prefixes_extra: []
 
+  # Whether to run pre-filter QC plots.
+  make_figures: true
+
 inputs:
   # Which studies to process. If empty, process all directories under data_backup.
   # Example:
   # studies: ["GSE202379", "GSE244832"]
   studies: []
+
+  # Source of truth for which study_accession values exist.
+  metadata_csv: "config/liver_scRNAseq_metadata_everything.csv"

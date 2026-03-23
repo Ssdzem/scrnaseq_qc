@@ -10,55 +10,28 @@ def _studies_to_process():
     if studies:
         return list(studies)
 
-    root = Path("data_backup")
-    if not root.exists():
+    meta = config.get("inputs", {}).get("metadata_csv") or "config/liver_scRNAseq_metadata_everything.csv"
+    try:
+        import csv
+        import re
+
+        def _is_missing(v: str) -> bool:
+            return (v or "").strip() == "" or (v or "").strip().lower() == "na"
+
+        with open(meta, newline="", encoding="utf-8", errors="replace") as handle:
+            reader = csv.DictReader(handle)
+            studies_set = set()
+            for row in reader:
+                study = (row.get("study_accession") or "").strip()
+                if not _is_missing(study):
+                    studies_set.add(re.sub(r"\s+", "", study))
+        return sorted(studies_set)
+    except FileNotFoundError:
         return []
-    return sorted([p.name for p in root.iterdir() if p.is_dir()])
 
 
-def _detect_inputs_for_study(study: str) -> dict:
-    """Auto-detect study input type(s) from data_backup/{study}/*.
-
-    Priority:
-      1) If a .rds exists -> treat as RDS study (single sample).
-      2) If a .mtx/.mtx.gz exists AND genes+barcodes csv exist -> treat as MTX study.
-      3) Any .h5 files -> treat as one-sample-per-h5.
-    """
-
-    study_dir = Path("data_backup") / study
-    detected: dict = {"rds": None, "mtx": None, "h5": []}
-    if not study_dir.exists():
-        return detected
-
-    rds_files = sorted(study_dir.glob("*.rds"))
-    if rds_files:
-        detected["rds"] = str(rds_files[0])
-
-    mtx_candidates = sorted(list(study_dir.rglob("*.mtx")) + list(study_dir.rglob("*.mtx.gz")))
-    if mtx_candidates:
-        genes_candidates = sorted(list(study_dir.rglob("*genes*.csv")) + list(study_dir.rglob("*features*.tsv")) + list(study_dir.rglob("*features*.csv")))
-        barcodes_candidates = sorted(list(study_dir.rglob("*cell*.csv")) + list(study_dir.rglob("*barcode*.tsv")) + list(study_dir.rglob("*barcode*.csv")))
-        if genes_candidates and barcodes_candidates:
-            detected["mtx"] = {
-                "matrix": str(mtx_candidates[0]),
-                "genes": str(genes_candidates[0]),
-                "barcodes": str(barcodes_candidates[0]),
-            }
-
-    detected["h5"] = [str(p) for p in sorted(study_dir.glob("*.h5"))]
-    return detected
-
-
-def _samples_for_study(study: str):
-    d = _detect_inputs_for_study(study)
-    samples: list[str] = []
-    if d["rds"]:
-        samples.append(f"{study}_rds")
-    if d["mtx"]:
-        samples.append(f"{study}_mtx")
-    for h5 in d["h5"]:
-        samples.append(Path(h5).stem)
-    return sorted(set(samples))
+def _study_raw_h5ad(study: str) -> str:
+    return f"out/{study}/raw.h5ad"
 
 
 STUDIES = _studies_to_process()
@@ -66,53 +39,60 @@ STUDIES = _studies_to_process()
 
 rule qc_all:
     input:
+        expand("out/{study}/qc/qc.h5ad", study=STUDIES),
+        expand("out/{study}/qc/pre_filter_metrics.csv", study=STUDIES),
         expand(
-            "data_backup/{study}/{sample}_qc.h5",
-            zip,
-            study=[s for st in STUDIES for s in [st] * len(_samples_for_study(st))],
-            sample=[sa for st in STUDIES for sa in _samples_for_study(st)],
+            "out/{study}/qc/figures/{fig}",
+            study=STUDIES,
+            fig=[
+                "pre_filter_genes_per_cell.png",
+                "pre_filter_counts_per_cell.png",
+                "pre_filter_mito_pct.png",
+            ],
         )
 
 
-rule rds_to_h5ad:
+rule qc_figures:
     input:
-        rds=lambda wc: _detect_inputs_for_study(wc.study)["rds"]
+        h5ad=lambda wc: _study_raw_h5ad(wc.study),
+        qc_config=QC_CONFIG_PATH,
     output:
-        h5ad=temp("data_backup/{study}/{study}_rds.h5ad")
+        metrics="out/{study}/qc/pre_filter_metrics.csv",
+        genes="out/{study}/qc/figures/pre_filter_genes_per_cell.png",
+        counts="out/{study}/qc/figures/pre_filter_counts_per_cell.png",
+        mito="out/{study}/qc/figures/pre_filter_mito_pct.png",
     params:
-        study=lambda wc: wc.study
+        study=lambda wc: wc.study,
     log:
-        "out/logs/qc_preproc/rds_to_h5ad/{study}.log"
+        "out/logs/qc_preproc/qc_figures/{study}.log"
     conda:
-        "../env/qc_preproc_r.yaml"
+        "../env/qc_preproc_py.yaml"
     shell:
         r"""
         mkdir -p $(dirname {log})
-        Rscript workflow/modules/qc_preproc/scripts/rds_to_h5ad.R \
-          --input-rds {input.rds} \
-          --output-h5ad {output.h5ad} \
+        $CONDA_PREFIX/bin/python workflow/modules/qc_preproc/scripts/qc_figures.py \
+          --study {params.study} \
+          --input-h5ad {input.h5ad} \
+          --qc-config {input.qc_config} \
+          --output-metrics {output.metrics} \
+          --output-genes-fig {output.genes} \
+          --output-counts-fig {output.counts} \
+          --output-mito-fig {output.mito} \
           --log {log}
         """
 
 
 rule qc_scanpy:
     input:
-        raw=lambda wc: (
-            _detect_inputs_for_study(wc.study)["rds"] if wc.sample == f"{wc.study}_rds" else
-            _detect_inputs_for_study(wc.study)["mtx"]["matrix"] if wc.sample == f"{wc.study}_mtx" else
-            str(Path("data_backup") / wc.study / f"{wc.sample}.h5")
-        ),
+        raw=lambda wc: _study_raw_h5ad(wc.study),
         qc_config=QC_CONFIG_PATH,
-        genes=lambda wc: [_detect_inputs_for_study(wc.study)["mtx"]["genes"]] if wc.sample == f"{wc.study}_mtx" else [],
-        barcodes=lambda wc: [_detect_inputs_for_study(wc.study)["mtx"]["barcodes"]] if wc.sample == f"{wc.study}_mtx" else [],
-        h5ad=lambda wc: [f"data_backup/{wc.study}/{wc.study}_rds.h5ad"] if wc.sample == f"{wc.study}_rds" else [],
+        preqc="out/{study}/qc/pre_filter_metrics.csv",
     output:
-        qc_h5="data_backup/{study}/{sample}_qc.h5",
+        qc_h5="out/{study}/qc/qc.h5ad",
     params:
         study=lambda wc: wc.study,
-        sample=lambda wc: wc.sample,
     log:
-        "out/logs/qc_preproc/qc_scanpy/{study}_{sample}.log"
+        "out/logs/qc_preproc/qc_scanpy/{study}.log"
     conda:
         "../env/qc_preproc_py.yaml"
     shell:
@@ -120,11 +100,8 @@ rule qc_scanpy:
         mkdir -p $(dirname {log})
         $CONDA_PREFIX/bin/python workflow/modules/qc_preproc/scripts/qc_scanpy.py \
           --study {params.study} \
-          --sample {params.sample} \
+          --sample {params.study} \
           --input {input.raw} \
-          --genes '{input.genes}' \
-          --barcodes '{input.barcodes}' \
-          --h5ad '{input.h5ad}' \
           --qc-config {input.qc_config} \
           --output {output.qc_h5} \
           --log {log}
