@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import gzip
 import shutil
+from collections.abc import Callable
 from pathlib import Path
 from typing import TextIO
 
@@ -49,48 +50,71 @@ def _ensure_gz_bytes(src: Path, dst: Path) -> None:
         shutil.copyfileobj(fin, fout)
 
 
-def _normalize_barcodes_to_tsv_gz(src: Path, dst: Path) -> None:
-    """Write a 10x-compatible `barcodes.tsv.gz`.
+def _extract_barcodes_series(df: pd.DataFrame) -> pd.Series:
+    if df.shape[1] == 1:
+        return df.iloc[:, 0]
+    key = None
+    for candidate in ["barcode", "barcodes", "cell", "cells", "Cell", "Barcode"]:
+        if candidate in df.columns:
+            key = candidate
+            break
+    if key is None:
+        key = df.columns[0]
+    return df[key]
 
-    Supports:
-    - existing `barcodes.tsv(.gz)` (copied/gzipped)
-    - CSV with a single column of barcodes
-    - CSV with a barcode column named like `barcode`/`cell`
+
+def _read_mtx_shape(path: Path) -> tuple[int, int]:
+    """Return (n_genes, n_barcodes) from a MatrixMarket file path."""
+
+    opener = gzip.open if path.suffix == ".gz" else open
+    with opener(path, "rt", encoding="utf-8") as fin:
+        for line in fin:
+            s = line.strip()
+            if not s or s.startswith("%"):
+                continue
+            parts = s.split()
+            if len(parts) != 3:
+                raise SystemExit(f"Invalid MatrixMarket shape line in {path}: {s!r}")
+            n_genes, n_barcodes, _nnz = (int(parts[0]), int(parts[1]), int(parts[2]))
+            return n_genes, n_barcodes
+    raise SystemExit(f"Could not parse MatrixMarket shape from {path}")
+
+
+def _select_by_expected_count(
+    *,
+    src: Path,
+    label: str,
+    expected_count: int,
+    candidate_a: Callable[[], pd.Series],
+    candidate_b: Callable[[], pd.Series],
+) -> pd.Series:
+    """Pick parsing mode that matches expected row count.
+
+    This protects against CSV files that may or may not have headers.
     """
 
-    if src.name.startswith("barcodes.tsv"):
-        _ensure_gz_tsv(src, dst)
-        return
+    series_a = candidate_a().astype(str)
+    series_b = candidate_b().astype(str)
 
-    if src.suffix != ".csv":
-        raise SystemExit(
-            "Unsupported barcodes format. Expected barcodes.tsv(.gz) or a CSV. "
-            f"Got: {src}"
-        )
+    len_a = len(series_a)
+    len_b = len(series_b)
+    a_matches = len_a == expected_count
+    b_matches = len_b == expected_count
 
-    df = pd.read_csv(src)
-    if df.shape[1] == 1:
-        series = df.iloc[:, 0]
-    else:
-        key = None
-        for candidate in ["barcode", "barcodes", "cell", "cells", "Cell", "Barcode"]:
-            if candidate in df.columns:
-                key = candidate
-                break
-        if key is None:
-            raise SystemExit(
-                f"Barcode CSV {src} must have a single column or a column named like barcode/cell. "
-                f"Columns: {list(df.columns)}"
-            )
-        series = df[key]
+    if a_matches and not b_matches:
+        return series_a
+    if b_matches and not a_matches:
+        return series_b
+    if a_matches and b_matches:
+        return series_a
 
-    barcodes = series.astype(str)
-    with gzip.open(dst, "wt", encoding="utf-8") as fout:
-        for val in barcodes:
-            fout.write(f"{val}\n")
+    raise SystemExit(
+        f"{label} count mismatch for {src}: expected {expected_count}, "
+        f"got {len_a} (header=infer) and {len_b} (header=None)."
+    )
 
 
-def _normalize_genes_to_tsv_gz(src: Path, dst: Path) -> None:
+def _normalize_genes_to_tsv_gz(src: Path, dst: Path, *, expected_count: int | None = None) -> None:
     """Write a 10x v2-style `genes.tsv.gz`.
 
     Supports:
@@ -109,11 +133,12 @@ def _normalize_genes_to_tsv_gz(src: Path, dst: Path) -> None:
             f"Got: {src}"
         )
 
-    df = pd.read_csv(src)
-    if df.shape[1] == 1:
-        gene_ids = df.iloc[:, 0].astype(str)
-        gene_symbols = df.iloc[:, 0].astype(str)
-    else:
+    def _extract(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+        if df.shape[1] == 1:
+            ids = df.iloc[:, 0].astype(str)
+            syms = df.iloc[:, 0].astype(str)
+            return ids, syms
+
         id_col = None
         symbol_col = None
         for candidate in ["gene_id", "gene_ids", "ensembl_id", "GeneID", "id", "ID"]:
@@ -128,8 +153,30 @@ def _normalize_genes_to_tsv_gz(src: Path, dst: Path) -> None:
             symbol_col = df.columns[0]
         if id_col is None:
             id_col = symbol_col
-        gene_ids = df[id_col].astype(str)
-        gene_symbols = df[symbol_col].astype(str)
+        return df[id_col].astype(str), df[symbol_col].astype(str)
+
+    df_infer = pd.read_csv(src)
+    ids_infer, syms_infer = _extract(df_infer)
+
+    if expected_count is None:
+        gene_ids, gene_symbols = ids_infer, syms_infer
+    else:
+        df_no_header = pd.read_csv(src, header=None)
+        ids_no_header, syms_no_header = _extract(df_no_header)
+        gene_ids = _select_by_expected_count(
+            src=src,
+            label="genes",
+            expected_count=expected_count,
+            candidate_a=lambda: ids_infer,
+            candidate_b=lambda: ids_no_header,
+        )
+        gene_symbols = _select_by_expected_count(
+            src=src,
+            label="genes(symbols)",
+            expected_count=expected_count,
+            candidate_a=lambda: syms_infer,
+            candidate_b=lambda: syms_no_header,
+        )
 
     with gzip.open(dst, "wt", encoding="utf-8") as fout:
         for gid, gsym in zip(gene_ids, gene_symbols, strict=False):
@@ -164,8 +211,29 @@ def _normalize_10x_triplet_inplace(*, matrix: Path, genes: Path, barcodes: Path,
 
     # Make compression consistent: always gz, and normalize naming.
     _ensure_gz_bytes(matrix, out_matrix)
-    _normalize_genes_to_tsv_gz(genes, out_genes)
-    _normalize_barcodes_to_tsv_gz(barcodes, out_barcodes)
+    expected_genes, expected_barcodes = _read_mtx_shape(out_matrix)
+    _normalize_genes_to_tsv_gz(genes, out_genes, expected_count=expected_genes)
+
+    if barcodes.name.startswith("barcodes.tsv"):
+        _ensure_gz_tsv(barcodes, out_barcodes)
+    elif barcodes.suffix == ".csv":
+        df_infer = pd.read_csv(barcodes)
+        df_no_header = pd.read_csv(barcodes, header=None)
+        barcodes_series = _select_by_expected_count(
+            src=barcodes,
+            label="barcodes",
+            expected_count=expected_barcodes,
+            candidate_a=lambda: _extract_barcodes_series(df_infer),
+            candidate_b=lambda: _extract_barcodes_series(df_no_header),
+        )
+        with gzip.open(out_barcodes, "wt", encoding="utf-8") as fout:
+            for val in barcodes_series.astype(str):
+                fout.write(f"{val}\n")
+    else:
+        raise SystemExit(
+            "Unsupported barcodes format. Expected barcodes.tsv(.gz) or a CSV. "
+            f"Got: {barcodes}"
+        )
 
     log.write(f"Normalized 10x triplet in-place under: {out_dir}\n")
     log.write(f"- {out_matrix.name}\n")
