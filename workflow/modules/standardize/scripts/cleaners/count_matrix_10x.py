@@ -241,6 +241,44 @@ def _normalize_10x_triplet_inplace(*, matrix: Path, genes: Path, barcodes: Path,
     log.write(f"- {out_barcodes.name}\n")
 
 
+def _write_features_from_genes(genes_tsv_gz: Path, features_tsv_gz: Path) -> None:
+    """Create a valid 10x-v3 features.tsv.gz (3 columns) from genes.tsv.gz."""
+
+    with gzip.open(genes_tsv_gz, "rt", encoding="utf-8") as fin, gzip.open(
+        features_tsv_gz, "wt", encoding="utf-8"
+    ) as fout:
+        for line in fin:
+            row = line.rstrip("\n")
+            if not row:
+                continue
+            parts = row.split("\t")
+            if len(parts) == 1:
+                gid = parts[0]
+                gsym = parts[0]
+            else:
+                gid, gsym = parts[0], parts[1]
+            fout.write(f"{gid}\t{gsym}\tGene Expression\n")
+
+
+def _write_genes_from_features(features_tsv_gz: Path, genes_tsv_gz: Path) -> None:
+    """Create a 10x-v2 genes.tsv.gz (2 columns) from features.tsv.gz."""
+
+    with gzip.open(features_tsv_gz, "rt", encoding="utf-8") as fin, gzip.open(
+        genes_tsv_gz, "wt", encoding="utf-8"
+    ) as fout:
+        for line in fin:
+            row = line.rstrip("\n")
+            if not row:
+                continue
+            parts = row.split("\t")
+            if len(parts) == 1:
+                gid = parts[0]
+                gsym = parts[0]
+            else:
+                gid, gsym = parts[0], parts[1]
+            fout.write(f"{gid}\t{gsym}\n")
+
+
 def run_count_matrix_10x(*, study: str, study_spec: dict, output_h5ad: Path, log: TextIO) -> None:
     inp = study_spec.get("input", {})
     matrix = _require_path(inp.get("matrix"), "matrix")
@@ -275,16 +313,16 @@ def run_count_matrix_10x(*, study: str, study_spec: dict, output_h5ad: Path, log
     # depending on version/args. Ensure both exist to avoid FileNotFoundError.
     genes_tsv = resolved_dir / "genes.tsv.gz"
     features_tsv = resolved_dir / "features.tsv.gz"
-    if genes_tsv.exists() and not features_tsv.exists():
+    if genes_tsv.exists():
         try:
-            shutil.copyfile(genes_tsv, features_tsv)
-            log.write(f"[{study}] Mirrored genes.tsv.gz -> features.tsv.gz\n")
+            _write_features_from_genes(genes_tsv, features_tsv)
+            log.write(f"[{study}] Wrote 3-column features.tsv.gz from genes.tsv.gz\n")
         except Exception as exc:  # noqa: BLE001
             log.write(f"[{study}] WARNING: failed creating features.tsv.gz: {exc!r}\n")
     elif features_tsv.exists() and not genes_tsv.exists():
         try:
-            shutil.copyfile(features_tsv, genes_tsv)
-            log.write(f"[{study}] Mirrored features.tsv.gz -> genes.tsv.gz\n")
+            _write_genes_from_features(features_tsv, genes_tsv)
+            log.write(f"[{study}] Created 2-column genes.tsv.gz from features.tsv.gz\n")
         except Exception as exc:  # noqa: BLE001
             log.write(f"[{study}] WARNING: failed creating genes.tsv.gz: {exc!r}\n")
     log.flush()
