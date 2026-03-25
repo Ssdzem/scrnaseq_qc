@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 
 import yaml
+from rtlog import build_tee_logger
 
 
 def _load_spec(path: str) -> dict:
@@ -38,9 +39,12 @@ def main() -> None:
     log_path = Path(args.log)
     _ensure_parent(log_path)
 
-    with open(log_path, "w", encoding="utf-8") as log:
+    with open(log_path, "a", encoding="utf-8") as raw_log:
+        log = build_tee_logger(raw_log)
         _log(json.dumps({"study": args.study, "process": process, "spec": args.spec}), log)
         _log(f"[{args.study}] Starting standardize process={process}", log)
+        _log(f"[{args.study}] Input spec={args.spec}", log)
+        _log(f"[{args.study}] Output h5ad={args.output}", log)
 
         if process == "count_matrix_10x":
             from cleaners.count_matrix_10x import run_count_matrix_10x

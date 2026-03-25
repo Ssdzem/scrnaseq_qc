@@ -6,6 +6,7 @@ import shutil
 import tarfile
 from pathlib import Path
 from typing import Iterable, TextIO
+from rtlog import build_tee_logger
 
 
 def _log(msg: str, log: TextIO) -> None:
@@ -152,8 +153,10 @@ def main() -> None:
     log_path = Path(args.log)
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
-    with log_path.open("a", encoding="utf-8") as log:
+    with log_path.open("a", encoding="utf-8") as raw_log:
+        log = build_tee_logger(raw_log)
         _log(f"Unpacking inputs for study={args.study}", log)
+        _log(f"Input roots: raw={raw_dir} qconly={qconly_dir}", log)
         _unpack_in_dir(raw_dir, log=log)
         _unpack_in_dir(qconly_dir, log=log)
 
