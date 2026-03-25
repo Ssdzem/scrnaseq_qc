@@ -26,6 +26,30 @@ qc:
   # Whether to run pre-filter QC plots.
   make_figures: true
 
+  # Batch key used when selecting HVGs.
+  hvg_batch_key: "sample_id"
+
+  # Batch key used by scVI integration.
+  scvi_batch_key: "sample_id"
+
+  # Number of HVGs used for exploratory embeddings.
+  hvg_n_top_genes: 3000
+
+  # Number of PCs in PCA.
+  n_pcs: 50
+
+  # kNN neighbors size for graph construction.
+  n_neighbors: 15
+
+  # Resolution for Leiden clustering in integrated space.
+  leiden_resolution: 1.0
+
+  # Max training epochs for scVI.
+  scvi_max_epochs: 100
+
+  # Random seed for reproducibility.
+  seed: 0
+
 inputs:
   # Which studies to process. If empty, process all directories under data_backup.
   # Example:
