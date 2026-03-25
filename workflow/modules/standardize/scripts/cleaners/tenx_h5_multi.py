@@ -10,6 +10,11 @@ import scanpy as sc
 from sklearn.mixture import GaussianMixture
 
 
+def _log_line(log: TextIO, msg: str) -> None:
+    log.write(msg.rstrip() + "\n")
+    log.flush()
+
+
 def _require_list(value, name: str) -> list:
     if not value or not isinstance(value, list):
         raise SystemExit(f"Missing required list '{name}'")
@@ -103,9 +108,10 @@ def _run_miqc_like_filter(a: ad.AnnData, *, qc_cfg: dict, sample_id: str, log: T
         keep |= ~((detected <= left_cutoff_detected) & (mito_pct >= min_discard_mito))
 
     removed = int((~keep).sum())
-    log.write(
+    _log_line(
+        log,
         f"[{sample_id}] miQC-like filter: posterior_cutoff={posterior_cutoff:.2f}, "
-        f"removed={removed}\n"
+        f"removed={removed}",
     )
     return keep
 
@@ -119,9 +125,10 @@ def _run_doublet_filter(a: ad.AnnData, *, qc_cfg: dict, sample_id: str, log: Tex
 
     keep = a.obs["doublet_score"].to_numpy(dtype=float) <= score_threshold
     removed = int((~keep).sum())
-    log.write(
+    _log_line(
+        log,
         f"[{sample_id}] scrublet filter: score_threshold={score_threshold:.3f}, "
-        f"removed={removed}\n"
+        f"removed={removed}",
     )
     return keep
 
@@ -177,12 +184,11 @@ def _apply_sample_mad_qc(a: ad.AnnData, *, sample_id: str, qc_cfg: dict, log: Te
     removed = int((~combined_mask).sum())
     invalid = int((~valid_mask).sum())
 
-    log.write(f"[{sample_id}] QC summary (k={k:.2f}, mito_upper_k={mito_upper_k:.2f}):\n")
-    log.write(f"[{sample_id}]   invalid/empty removed={invalid}\n")
+    _log_line(log, f"[{sample_id}] QC summary (k={k:.2f}, mito_upper_k={mito_upper_k:.2f}):")
+    _log_line(log, f"[{sample_id}]   invalid/empty removed={invalid}")
     for line in threshold_report:
-        log.write(f"[{sample_id}]   {line}\n")
-    log.write(f"[{sample_id}] Cells kept={kept} removed={removed}\n")
-    log.flush()
+        _log_line(log, f"[{sample_id}]   {line}")
+    _log_line(log, f"[{sample_id}] Cells kept={kept} removed={removed}")
 
     return a[combined_mask].copy()
 
@@ -192,39 +198,36 @@ def run_tenx_h5_multi(*, study: str, study_spec: dict, output_h5ad: Path, log: T
     samples = _require_list(inp.get("samples"), "input.samples")
     samples_df = _normalize_sample_table(samples)
     qc_cfg = _read_qc_config(study_spec)
+    _log_line(log, f"[{study}] Method=tenx_h5_multi sample_count={len(samples_df)}")
+    if qc_cfg is not None:
+        _log_line(log, f"[{study}] QC config={qc_cfg}")
 
     adatas: list[ad.AnnData] = []
     for row in samples_df.itertuples(index=False):
         sample_id = str(row.sample_id)
         h5_path = _require_path(str(row.h5), f"samples[{sample_id}].h5")
-        log.write(f"[{study}] Reading 10x h5: {h5_path} (sample_id={sample_id})\n")
-        log.flush()
+        _log_line(log, f"[{study}] Reading 10x h5: {h5_path} (sample_id={sample_id})")
         a = sc.read_10x_h5(str(h5_path))
         a.var_names_make_unique()
         a.obs["sample_id"] = sample_id
         a.obs["study_accession"] = study
-        log.write(f"[{study}] Loaded {sample_id}: n_obs={a.n_obs} n_vars={a.n_vars}\n")
-        log.flush()
+        _log_line(log, f"[{study}] Loaded {sample_id}: n_obs={a.n_obs} n_vars={a.n_vars}")
 
         if qc_cfg is not None:
             before = a.n_obs
             a = _apply_sample_mad_qc(a, sample_id=sample_id, qc_cfg=qc_cfg, log=log)
-            log.write(f"[{study}] QC-filtered {sample_id}: n_obs={before} -> {a.n_obs}\n")
-            log.flush()
+            _log_line(log, f"[{study}] QC-filtered {sample_id}: n_obs={before} -> {a.n_obs}")
 
         adatas.append(a)
 
-    log.write(f"[{study}] Concatenating {len(adatas)} samples\n")
-    log.flush()
+    _log_line(log, f"[{study}] Concatenating {len(adatas)} samples")
     merged = ad.concat(adatas, axis=0, join="outer", label=None, merge="same", index_unique="-")
-    log.write(f"[{study}] Concatenated: n_obs={merged.n_obs} n_vars={merged.n_vars}\n")
-    log.flush()
+    _log_line(log, f"[{study}] Concatenated: n_obs={merged.n_obs} n_vars={merged.n_vars}")
 
     metadata_path = inp.get("metadata")
     if metadata_path:
         md = _require_path(metadata_path, "metadata")
-        log.write(f"[{study}] Merging metadata: {md}\n")
-        log.flush()
+        _log_line(log, f"[{study}] Merging metadata: {md}")
         md_df = pd.read_csv(md)
         if "sample_id" in md_df.columns:
             md_df["sample_id"] = md_df["sample_id"].astype(str)
@@ -238,10 +241,8 @@ def run_tenx_h5_multi(*, study: str, study_spec: dict, output_h5ad: Path, log: T
             md_df.index = md_df.index.astype(str)
             merged.obs = merged.obs.join(md_df, how="left")
         else:
-            log.write(f"[{study}] WARNING: metadata has no obvious barcode column; skipping join\n")
-        log.flush()
+            _log_line(log, f"[{study}] WARNING: metadata has no obvious barcode column; skipping join")
 
     merged.uns["standardize"] = {"study": study, "process": "tenx_h5_multi"}
-    log.write(f"[{study}] Writing: {output_h5ad}\n")
-    log.flush()
+    _log_line(log, f"[{study}] Writing: {output_h5ad}")
     merged.write_h5ad(output_h5ad)
