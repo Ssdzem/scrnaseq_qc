@@ -10,5 +10,6 @@ dependencies:
   - scipy
   - anndata
   - scanpy
+  - scikit-learn
   - pyyaml
   - h5py
