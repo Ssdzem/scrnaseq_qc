@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 
 import yaml
+from rtlog import log_kv, log_line
 
 
 def _load_spec(path: str) -> dict:
@@ -12,11 +13,6 @@ def _load_spec(path: str) -> dict:
 
 def _ensure_parent(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-
-
-def _log(msg: str, log) -> None:
-    log.write(msg.rstrip() + "\n")
-    log.flush()
 
 
 def main() -> None:
@@ -39,8 +35,8 @@ def main() -> None:
     _ensure_parent(log_path)
 
     with open(log_path, "w", encoding="utf-8") as log:
-        _log(json.dumps({"study": args.study, "process": process, "spec": args.spec}), log)
-        _log(f"[{args.study}] Starting standardize process={process}", log)
+        log_line(log, json.dumps({"study": args.study, "process": process, "spec": args.spec}), with_ts=False)
+        log_kv(log, "standardize.start", study=args.study, process=process, spec=args.spec)
 
         if process == "count_matrix_10x":
             from cleaners.count_matrix_10x import run_count_matrix_10x
@@ -57,7 +53,7 @@ def main() -> None:
         else:
             raise SystemExit(f"Unknown process '{process}' for study '{args.study}'")
 
-        _log(f"[{args.study}] Standardize complete", log)
+        log_kv(log, "standardize.complete", study=args.study, output=args.output)
 
 
 if __name__ == "__main__":

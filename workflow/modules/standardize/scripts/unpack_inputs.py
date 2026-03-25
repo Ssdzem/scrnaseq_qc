@@ -5,12 +5,9 @@ import gzip
 import shutil
 import tarfile
 from pathlib import Path
-from typing import Iterable, TextIO
+from typing import Iterable
 
-
-def _log(msg: str, log: TextIO) -> None:
-    log.write(msg.rstrip() + "\n")
-    log.flush()
+from rtlog import log_kv, log_line
 
 
 def _is_gzip(path: Path) -> bool:
@@ -39,7 +36,7 @@ def _safe_extract_tar(*, tar_path: Path, dst_dir: Path, log: TextIO) -> None:
                 raise SystemExit(f"Refusing to extract outside destination: {member.name}")
         tf.extractall(dst_dir)
 
-    _log(f"Extracted tar: {tar_path} -> {dst_dir}", log)
+    log_line(log, f"Extracted tar: {tar_path} -> {dst_dir}")
 
 
 def _maybe_create_top_level_symlink(*, tar_path: Path, log: TextIO) -> None:
@@ -72,16 +69,16 @@ def _maybe_create_top_level_symlink(*, tar_path: Path, log: TextIO) -> None:
 
     try:
         link_path.symlink_to(top, target_is_directory=True)
-        _log(f"Symlink: {link_path} -> {top}", log)
+        log_line(log, f"Symlink: {link_path} -> {top}")
     except OSError as e:
-        _log(f"WARNING: Failed to create symlink {link_path}: {e}", log)
+        log_line(log, f"WARNING: Failed to create symlink {link_path}: {e}")
 
 
 def _gunzip_file(*, gz_path: Path, dst_path: Path, log: TextIO) -> None:
     dst_path.parent.mkdir(parents=True, exist_ok=True)
 
     if dst_path.exists() and dst_path.stat().st_size > 0:
-        _log(f"Skip gunzip (exists): {dst_path}", log)
+        log_line(log, f"Skip gunzip (exists): {dst_path}")
         return
 
     try:
@@ -90,10 +87,10 @@ def _gunzip_file(*, gz_path: Path, dst_path: Path, log: TextIO) -> None:
     except gzip.BadGzipFile:
         if dst_path.exists():
             dst_path.unlink()
-        _log(f"WARNING: Not a gzipped file, skipping gunzip: {gz_path}", log)
+        log_line(log, f"WARNING: Not a gzipped file, skipping gunzip: {gz_path}")
         return
 
-    _log(f"Gunzip: {gz_path} -> {dst_path}", log)
+    log_line(log, f"Gunzip: {gz_path} -> {dst_path}")
 
 
 def _iter_archives(root: Path) -> Iterable[Path]:
@@ -111,7 +108,7 @@ def _iter_archives(root: Path) -> Iterable[Path]:
 
 def _unpack_in_dir(root: Path, *, log: TextIO) -> None:
     if not root.exists():
-        _log(f"Skip missing dir: {root}", log)
+        log_line(log, f"Skip missing dir: {root}")
         return
 
     for path in _iter_archives(root):
@@ -129,7 +126,7 @@ def _unpack_in_dir(root: Path, *, log: TextIO) -> None:
         if path.suffix == ".gz":
             # Some providers ship files ending in .gz that are not gzipped.
             if not _is_gzip(path):
-                _log(f"Skip non-gzip .gz file: {path}", log)
+                log_line(log, f"Skip non-gzip .gz file: {path}")
                 continue
             out_path = path.with_suffix("")
             _gunzip_file(gz_path=path, dst_path=out_path, log=log)
@@ -153,9 +150,10 @@ def main() -> None:
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
     with log_path.open("a", encoding="utf-8") as log:
-        _log(f"Unpacking inputs for study={args.study}", log)
+        log_kv(log, "unpack.start", study=args.study, outdir=args.outdir)
         _unpack_in_dir(raw_dir, log=log)
         _unpack_in_dir(qconly_dir, log=log)
+        log_kv(log, "unpack.complete", study=args.study)
 
 
 if __name__ == "__main__":
