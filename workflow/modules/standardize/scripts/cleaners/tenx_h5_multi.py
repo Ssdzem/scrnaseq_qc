@@ -86,6 +86,7 @@ def _run_miqc_like_filter(a: ad.AnnData, *, qc_cfg: dict, sample_id: str, log: T
         return finite_mask
 
     features = np.column_stack([np.log1p(detected[finite_mask]), mito_pct[finite_mask]])
+    features = np.column_stack([np.log1p(detected), mito_pct])
 
     model = GaussianMixture(n_components=2, covariance_type="full", random_state=0)
     model.fit(features)
@@ -97,6 +98,7 @@ def _run_miqc_like_filter(a: ad.AnnData, *, qc_cfg: dict, sample_id: str, log: T
 
     prob_compromised = np.ones(a.n_obs, dtype=float)
     prob_compromised[finite_mask] = posteriors[:, compromised_idx]
+    prob_compromised = posteriors[:, compromised_idx]
     a.obs["miqc_prob_compromised"] = prob_compromised
 
     keep = prob_compromised <= posterior_cutoff
@@ -109,6 +111,11 @@ def _run_miqc_like_filter(a: ad.AnnData, *, qc_cfg: dict, sample_id: str, log: T
     if discarded_finite.any():
         min_discard_mito = float(mito_pct[discarded_finite].min())
         left_cutoff_detected = float(detected[np.argmin(np.where(discarded_finite, mito_pct, np.inf))])
+    keep |= (detected >= intact_mean_detected) & (mito_pct <= intact_mean_mito)
+
+    if (~keep).any():
+        min_discard_mito = float(mito_pct[~keep].min())
+        left_cutoff_detected = float(detected[np.argmin(np.where(~keep, mito_pct, np.inf))])
         keep |= ~((detected <= left_cutoff_detected) & (mito_pct >= min_discard_mito))
 
     removed = int((~keep).sum())
