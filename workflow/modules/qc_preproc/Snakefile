@@ -2,4 +2,5 @@
 
 include: "rules/qc_preproc.smk"
 
-ruleorder: qc_all > qc_scanpy > qc_trim > qc_pretrim_pictures
+# Keep ruleorder aligned with rules that actually exist in this module.
+ruleorder: qc_all > qc_study_explore > qc_pretrim_pictures > qc_all_explore > qc_concat_all_raw

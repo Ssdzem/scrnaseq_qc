@@ -64,7 +64,7 @@ rule qc_pretrim_pictures:
     params:
         study=lambda wc: wc.study,
     log:
-        lambda wc: _qc_log(wc.study)
+        _qc_log("{study}")
     conda:
         "../env/qc_preproc_py.yaml"
     shell:
@@ -102,7 +102,7 @@ rule qc_study_explore:
     params:
         study=lambda wc: wc.study,
     log:
-        lambda wc: _qc_log(wc.study)
+        _qc_log("{study}")
     conda:
         "../env/qc_preproc_py.yaml"
     shell:
@@ -130,7 +130,7 @@ rule qc_concat_all_raw:
         all_raw="out/all_studies/all_raw.h5ad",
         done=touch("out/all_studies/.all_raw_done"),
     log:
-        lambda wc: _qc_log("all_studies")
+        _qc_log("all_studies")
     conda:
         "../env/qc_preproc_py.yaml"
     shell:
@@ -157,7 +157,7 @@ rule qc_all_explore:
         all_explore="out/all_studies/all_explore.h5ad",
         done=touch("out/all_studies/.all_explore_done"),
     log:
-        lambda wc: _qc_log("all_studies")
+        _qc_log("all_studies")
     conda:
         "../env/qc_preproc_py.yaml"
     shell:
