@@ -40,6 +40,12 @@ def _qc_log(study: str) -> str:
 
 STUDIES = _studies_to_process()
 
+def _study_explore_mode() -> str:
+    qc_cfg = config.get("qc", {})
+    if bool(qc_cfg.get("study_explore_with_integration", True)):
+        return "integration"
+    return "noop"
+
 
 rule qc_all:
     input:
@@ -101,6 +107,7 @@ rule qc_study_explore:
         done=touch("out/{study}/qc/.study_explore_done"),
     params:
         study=lambda wc: wc.study,
+        mode=lambda wc: _study_explore_mode(),
     log:
         _qc_log("{study}")
     conda:
@@ -113,9 +120,10 @@ rule qc_study_explore:
           echo "[$(date -Is)] INPUT pre_integration_h5={input.pre_integration_h5}"
           echo "[$(date -Is)] INPUT qc_config={input.qc_config}"
           echo "[$(date -Is)] INPUT pre_integration_done={input.pre_integration_done}"
+          echo "[$(date -Is)] PARAM mode={params.mode}"
           echo "[$(date -Is)] OUTPUT explore_h5={output.explore_h5}"
           $CONDA_PREFIX/bin/python workflow/modules/qc_preproc/scripts/explore_scanpy.py \
-          --mode integration \
+          --mode {params.mode} \
           --study {params.study} \
           --input {input.pre_integration_h5} \
           --qc-config {input.qc_config} \

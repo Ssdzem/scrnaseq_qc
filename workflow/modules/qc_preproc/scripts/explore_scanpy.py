@@ -148,7 +148,7 @@ def run_integration(adata, cfg: dict):
 
 def main(argv: list[str] | None = None):
     p = argparse.ArgumentParser()
-    p.add_argument("--mode", choices=["full", "pre", "integration"], default="full")
+    p.add_argument("--mode", choices=["full", "pre", "integration", "noop"], default="full")
     p.add_argument("--study", required=True)
     p.add_argument("--input", required=True)
     p.add_argument("--qc-config", required=True)
@@ -170,6 +170,10 @@ def main(argv: list[str] | None = None):
     if args.mode in {"full", "integration"}:
         logging.info("Running integration step for: %s", args.study)
         adata = run_integration(adata, cfg=cfg)
+    if args.mode == "noop":
+        adata.uns.setdefault("qc_preproc", {})
+        adata.uns["qc_preproc"]["study_explore_integration_skipped"] = True
+        logging.info("Skipping integration for this run (mode=noop)")
 
     out = Path(args.output)
     out.parent.mkdir(parents=True, exist_ok=True)
