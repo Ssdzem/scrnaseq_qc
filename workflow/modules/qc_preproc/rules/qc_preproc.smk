@@ -34,17 +34,15 @@ def _study_raw_h5ad(study: str) -> str:
     return f"out/{study}/raw.h5ad"
 
 
-def _study_trimmed_h5ad(study: str) -> str:
-    return f"out/{study}/qc/trimmed.h5ad"
-
-
 STUDIES = _studies_to_process()
 
 
 rule qc_all:
     input:
         expand("out/{study}/qc/.pretrim_pictures_done", study=STUDIES),
-        expand("out/{study}/qc/.trimmed_done", study=STUDIES),
+        expand("out/{study}/qc/.study_explore_done", study=STUDIES),
+        "out/all_studies/.all_raw_done",
+        "out/all_studies/.all_explore_done",
     output:
         touch(expand("out/{study}/qc/.qc_all_done", study=STUDIES))
 
@@ -80,56 +78,71 @@ rule qc_pretrim_pictures:
         """
 
 
-rule qc_trim:
+rule qc_study_explore:
     input:
         raw=lambda wc: _study_raw_h5ad(wc.study),
         qc_config=QC_CONFIG_PATH,
-        preqc="out/{study}/qc/pre_filter_metrics.csv",
         pretrim_done="out/{study}/qc/.pretrim_pictures_done",
     output:
-        trimmed="out/{study}/qc/trimmed.h5ad",
-        done=touch("out/{study}/qc/.trimmed_done"),
+        explore_h5="out/{study}/qc/{study}_explore.h5ad",
+        done=touch("out/{study}/qc/.study_explore_done"),
     params:
         study=lambda wc: wc.study,
     log:
-        "out/logs/qc_preproc/qc_trim/{study}.log"
+        "out/logs/qc_preproc/qc_study_explore/{study}.log"
     conda:
         "../env/qc_preproc_py.yaml"
     shell:
         r"""
         mkdir -p $(dirname {log})
-        $CONDA_PREFIX/bin/python workflow/modules/qc_preproc/scripts/qc_scanpy.py \
+        $CONDA_PREFIX/bin/python workflow/modules/qc_preproc/scripts/explore_scanpy.py \
           --study {params.study} \
-          --sample {params.study} \
           --input {input.raw} \
           --qc-config {input.qc_config} \
-          --output {output.trimmed} \
+          --output {output.explore_h5} \
           --log {log}
         """
 
 
-rule qc_scanpy:
+rule qc_concat_all_raw:
     input:
-        raw=lambda wc: _study_trimmed_h5ad(wc.study),
-        qc_config=QC_CONFIG_PATH,
-        preqc="out/{study}/qc/pre_filter_metrics.csv",
-        trimmed_done="out/{study}/qc/.trimmed_done",
+        h5ads=expand("out/{study}/raw.h5ad", study=STUDIES),
     output:
-        qc_h5="out/{study}/qc/qc.h5ad",
-    params:
-        study=lambda wc: wc.study,
+        all_raw="out/all_studies/all_raw.h5ad",
+        done=touch("out/all_studies/.all_raw_done"),
     log:
-        "out/logs/qc_preproc/qc_scanpy/{study}.log"
+        "out/logs/qc_preproc/qc_concat_all_raw.log"
     conda:
         "../env/qc_preproc_py.yaml"
     shell:
         r"""
         mkdir -p $(dirname {log})
-        $CONDA_PREFIX/bin/python workflow/modules/qc_preproc/scripts/qc_scanpy.py \
-          --study {params.study} \
-          --sample {params.study} \
-          --input {input.raw} \
+        $CONDA_PREFIX/bin/python workflow/modules/qc_preproc/scripts/concat_raw.py \
+          --inputs {input.h5ads} \
+          --output {output.all_raw} \
+          --log {log}
+        """
+
+
+rule qc_all_explore:
+    input:
+        all_raw="out/all_studies/all_raw.h5ad",
+        qc_config=QC_CONFIG_PATH,
+        all_raw_done="out/all_studies/.all_raw_done",
+    output:
+        all_explore="out/all_studies/all_explore.h5ad",
+        done=touch("out/all_studies/.all_explore_done"),
+    log:
+        "out/logs/qc_preproc/qc_all_explore.log"
+    conda:
+        "../env/qc_preproc_py.yaml"
+    shell:
+        r"""
+        mkdir -p $(dirname {log})
+        $CONDA_PREFIX/bin/python workflow/modules/qc_preproc/scripts/explore_scanpy.py \
+          --study all_studies \
+          --input {input.all_raw} \
           --qc-config {input.qc_config} \
-          --output {output.qc_h5} \
+          --output {output.all_explore} \
           --log {log}
         """
