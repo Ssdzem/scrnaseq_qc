@@ -47,6 +47,9 @@ qc:
   # Max training epochs for scVI.
   scvi_max_epochs: 100
 
+  # Integration backend for exploratory embeddings: "scvi" or "harmony".
+  integration_method: "scvi"
+
   # Whether to run scVI integration for per-study explore outputs.
   # Set false to skip integration for individual studies (useful for single-study runs).
   study_explore_with_integration: true

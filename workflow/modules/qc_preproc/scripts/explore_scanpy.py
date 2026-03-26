@@ -4,7 +4,6 @@ from pathlib import Path
 
 import numpy as np
 import scanpy as sc
-import scvi
 import yaml
 
 
@@ -38,7 +37,6 @@ def prepare_before_integration(adata, study: str, cfg: dict):
     n_top_genes = int(cfg.get("hvg_n_top_genes", 3000))
     seed = int(cfg.get("seed", 0))
     np.random.seed(seed)
-    scvi.settings.seed = seed
     logging.info(
         "Pre-integration config: batch_key=%s scvi_batch_key=%s n_top_genes=%d seed=%d",
         batch_key,
@@ -91,13 +89,13 @@ def prepare_before_integration(adata, study: str, cfg: dict):
 
 
 def run_integration(adata, cfg: dict):
+    integration_method = str(cfg.get("integration_method", "scvi")).strip().lower()
     n_pcs = int(cfg.get("n_pcs", 50))
     n_neighbors = int(cfg.get("n_neighbors", 15))
     leiden_resolution = float(cfg.get("leiden_resolution", 1.0))
     max_epochs = int(cfg.get("scvi_max_epochs", 100))
     seed = int(cfg.get("seed", 0))
     np.random.seed(seed)
-    scvi.settings.seed = seed
 
     pre_cfg = adata.uns.get("qc_preproc", {}).get("pre_integration_config", {})
     scvi_batch_key = str(pre_cfg.get("scvi_batch_key", cfg.get("scvi_batch_key", "sample_id")))
@@ -116,19 +114,36 @@ def run_integration(adata, cfg: dict):
     sc.tl.pca(adata_hvg, n_comps=n_pcs, svd_solver="arpack")
     logging.info("Computed PCA")
 
-    scvi.model.SCVI.setup_anndata(adata_hvg, layer="counts", batch_key=scvi_batch_key)
-    model = scvi.model.SCVI(adata_hvg)
-    model.train(max_epochs=max_epochs)
-    adata_hvg.obsm["X_scVI"] = model.get_latent_representation()
-    logging.info("Trained scVI and saved latent representation")
+    if integration_method == "scvi":
+        import scvi
 
-    sc.pp.neighbors(adata_hvg, use_rep="X_scVI", n_neighbors=n_neighbors)
+        scvi.settings.seed = seed
+        scvi.model.SCVI.setup_anndata(adata_hvg, layer="counts", batch_key=scvi_batch_key)
+        model = scvi.model.SCVI(adata_hvg)
+        model.train(max_epochs=max_epochs)
+        adata_hvg.obsm["X_scVI"] = model.get_latent_representation()
+        integrated_rep = "X_scVI"
+        logging.info("Trained scVI and saved latent representation")
+    elif integration_method == "harmony":
+        import harmonypy as hm
+
+        harmony_out = hm.run_harmony(adata_hvg.obsm["X_pca"], adata_hvg.obs, scvi_batch_key)
+        adata_hvg.obsm["X_harmony"] = harmony_out.Z_corr.T
+        adata_hvg.obsm["X_scVI"] = adata_hvg.obsm["X_harmony"]
+        integrated_rep = "X_harmony"
+        logging.info("Ran Harmony integration and saved X_harmony embedding")
+    else:
+        raise ValueError(f"Unsupported integration_method={integration_method!r}; expected 'scvi' or 'harmony'.")
+
+    sc.pp.neighbors(adata_hvg, use_rep=integrated_rep, n_neighbors=n_neighbors)
     sc.tl.umap(adata_hvg)
     sc.tl.leiden(adata_hvg, key_added="leiden_scvi", resolution=leiden_resolution)
     logging.info("Computed neighbors, UMAP, and Leiden clusters")
 
     adata.uns.setdefault("qc_preproc", {})
     adata.uns["qc_preproc"]["integration_config"] = {
+        "integration_method": integration_method,
+        "integration_batch_key": scvi_batch_key,
         "n_pcs": n_pcs,
         "n_neighbors": n_neighbors,
         "leiden_resolution": leiden_resolution,
@@ -139,6 +154,8 @@ def run_integration(adata, cfg: dict):
     adata.uns["qc_preproc"]["hvg_var_names"] = adata_hvg.var_names.tolist()
     adata.obsm["X_pca"] = adata_hvg.obsm["X_pca"]
     adata.obsm["X_scVI"] = adata_hvg.obsm["X_scVI"]
+    if "X_harmony" in adata_hvg.obsm:
+        adata.obsm["X_harmony"] = adata_hvg.obsm["X_harmony"]
     adata.obsm["X_umap"] = adata_hvg.obsm["X_umap"]
     adata.obs["leiden_scvi"] = adata_hvg.obs["leiden_scvi"].astype(str).reindex(adata.obs_names)
     logging.info("Transferred embeddings and clusters back to full AnnData")
