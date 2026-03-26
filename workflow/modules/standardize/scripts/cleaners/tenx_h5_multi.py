@@ -148,6 +148,10 @@ def _annotate_doublet_scores(a: ad.AnnData, *, qc_cfg: dict, sample_id: str, log
         a.obs["doublet_score"] = np.nan
     if "predicted_doublet" not in a.obs.columns:
         a.obs["predicted_doublet"] = False
+    a.obs["doublet_score"] = pd.to_numeric(a.obs["doublet_score"], errors="coerce").astype(float)
+    a.obs["predicted_doublet"] = (
+        pd.Series(a.obs["predicted_doublet"]).fillna(False).astype(bool).to_numpy()
+    )
 
     predicted = int(a.obs["predicted_doublet"].to_numpy(dtype=bool).sum())
     log_line(
@@ -255,6 +259,13 @@ def run_tenx_h5_multi(*, study: str, study_spec: dict, output_h5ad: Path, log: T
     merged = ad.concat(adatas, axis=0, join="outer", label=None, merge="same", index_unique="-")
     log_line(log, f"[{study}] Concatenated: n_obs={merged.n_obs} n_vars={merged.n_vars}")
 
+    if "doublet_score" in merged.obs.columns:
+        merged.obs["doublet_score"] = pd.to_numeric(merged.obs["doublet_score"], errors="coerce").astype(float)
+    if "predicted_doublet" in merged.obs.columns:
+        merged.obs["predicted_doublet"] = (
+            pd.Series(merged.obs["predicted_doublet"]).fillna(False).astype(bool).to_numpy()
+        )
+
     metadata_path = inp.get("metadata")
     if metadata_path:
         md = _require_path(metadata_path, "metadata")
@@ -276,5 +287,5 @@ def run_tenx_h5_multi(*, study: str, study_spec: dict, output_h5ad: Path, log: T
 
     merged.uns["standardize"] = {"study": study, "process": "tenx_h5_multi"}
     log_line(log, f"[{study}] Writing: {output_h5ad}")
-    log_kv(log, "tenx_h5_multi.complete", study=study, output=output_h5ad)
     merged.write_h5ad(output_h5ad)
+    log_kv(log, "tenx_h5_multi.complete", study=study, output=output_h5ad)
