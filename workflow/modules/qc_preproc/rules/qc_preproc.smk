@@ -34,6 +34,10 @@ def _study_raw_h5ad(study: str) -> str:
     return f"out/{study}/raw.h5ad"
 
 
+def _qc_log(study: str) -> str:
+    return f"out/logs/qc/{study}.log"
+
+
 STUDIES = _studies_to_process()
 
 
@@ -60,21 +64,30 @@ rule qc_pretrim_pictures:
     params:
         study=lambda wc: wc.study,
     log:
-        "out/logs/qc_preproc/qc_pretrim_pictures/{study}.log"
+        lambda wc: _qc_log(wc.study)
     conda:
         "../env/qc_preproc_py.yaml"
     shell:
         r"""
         mkdir -p $(dirname {log})
-        $CONDA_PREFIX/bin/python workflow/modules/qc_preproc/scripts/qc_figures.py \
+        : > {log}
+        {{
+          echo "[$(date -Is)] [qc_pretrim_pictures] study={params.study}"
+          echo "[$(date -Is)] INPUT input_h5ad={input.h5ad}"
+          echo "[$(date -Is)] INPUT qc_config={input.qc_config}"
+          echo "[$(date -Is)] OUTPUT metrics={output.metrics}"
+          echo "[$(date -Is)] OUTPUT genes={output.genes}"
+          echo "[$(date -Is)] OUTPUT counts={output.counts}"
+          echo "[$(date -Is)] OUTPUT mito={output.mito}"
+          $CONDA_PREFIX/bin/python workflow/modules/qc_preproc/scripts/qc_figures.py \
           --study {params.study} \
           --input-h5ad {input.h5ad} \
           --qc-config {input.qc_config} \
           --output-metrics {output.metrics} \
           --output-genes-fig {output.genes} \
           --output-counts-fig {output.counts} \
-          --output-mito-fig {output.mito} \
-          --log {log}
+          --output-mito-fig {output.mito}
+        }} 2>&1 | tee -a {log}
         """
 
 
@@ -89,18 +102,24 @@ rule qc_study_explore:
     params:
         study=lambda wc: wc.study,
     log:
-        "out/logs/qc_preproc/qc_study_explore/{study}.log"
+        lambda wc: _qc_log(wc.study)
     conda:
         "../env/qc_preproc_py.yaml"
     shell:
         r"""
         mkdir -p $(dirname {log})
-        $CONDA_PREFIX/bin/python workflow/modules/qc_preproc/scripts/explore_scanpy.py \
+        {{
+          echo "[$(date -Is)] [qc_study_explore] study={params.study}"
+          echo "[$(date -Is)] INPUT raw={input.raw}"
+          echo "[$(date -Is)] INPUT qc_config={input.qc_config}"
+          echo "[$(date -Is)] INPUT pretrim_done={input.pretrim_done}"
+          echo "[$(date -Is)] OUTPUT explore_h5={output.explore_h5}"
+          $CONDA_PREFIX/bin/python workflow/modules/qc_preproc/scripts/explore_scanpy.py \
           --study {params.study} \
           --input {input.raw} \
           --qc-config {input.qc_config} \
-          --output {output.explore_h5} \
-          --log {log}
+          --output {output.explore_h5}
+        }} 2>&1 | tee -a {log}
         """
 
 
@@ -111,16 +130,21 @@ rule qc_concat_all_raw:
         all_raw="out/all_studies/all_raw.h5ad",
         done=touch("out/all_studies/.all_raw_done"),
     log:
-        "out/logs/qc_preproc/qc_concat_all_raw.log"
+        lambda wc: _qc_log("all_studies")
     conda:
         "../env/qc_preproc_py.yaml"
     shell:
         r"""
         mkdir -p $(dirname {log})
-        $CONDA_PREFIX/bin/python workflow/modules/qc_preproc/scripts/concat_raw.py \
+        : > {log}
+        {{
+          echo "[$(date -Is)] [qc_concat_all_raw] study=all_studies"
+          echo "[$(date -Is)] INPUT h5ads={input.h5ads}"
+          echo "[$(date -Is)] OUTPUT all_raw={output.all_raw}"
+          $CONDA_PREFIX/bin/python workflow/modules/qc_preproc/scripts/concat_raw.py \
           --inputs {input.h5ads} \
-          --output {output.all_raw} \
-          --log {log}
+          --output {output.all_raw}
+        }} 2>&1 | tee -a {log}
         """
 
 
@@ -133,16 +157,22 @@ rule qc_all_explore:
         all_explore="out/all_studies/all_explore.h5ad",
         done=touch("out/all_studies/.all_explore_done"),
     log:
-        "out/logs/qc_preproc/qc_all_explore.log"
+        lambda wc: _qc_log("all_studies")
     conda:
         "../env/qc_preproc_py.yaml"
     shell:
         r"""
         mkdir -p $(dirname {log})
-        $CONDA_PREFIX/bin/python workflow/modules/qc_preproc/scripts/explore_scanpy.py \
+        {{
+          echo "[$(date -Is)] [qc_all_explore] study=all_studies"
+          echo "[$(date -Is)] INPUT all_raw={input.all_raw}"
+          echo "[$(date -Is)] INPUT qc_config={input.qc_config}"
+          echo "[$(date -Is)] INPUT all_raw_done={input.all_raw_done}"
+          echo "[$(date -Is)] OUTPUT all_explore={output.all_explore}"
+          $CONDA_PREFIX/bin/python workflow/modules/qc_preproc/scripts/explore_scanpy.py \
           --study all_studies \
           --input {input.all_raw} \
           --qc-config {input.qc_config} \
-          --output {output.all_explore} \
-          --log {log}
+          --output {output.all_explore}
+        }} 2>&1 | tee -a {log}
         """

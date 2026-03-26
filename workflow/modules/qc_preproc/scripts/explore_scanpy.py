@@ -17,6 +17,7 @@ def setup_logging(log_path: str | None):
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(message)s",
         handlers=handlers,
+        force=True,
     )
 
 
@@ -42,6 +43,18 @@ def run_exploration(adata, study: str, cfg: dict):
     seed = int(cfg.get("seed", 0))
     np.random.seed(seed)
     scvi.settings.seed = seed
+    logging.info(
+        "Exploration config: batch_key=%s scvi_batch_key=%s n_top_genes=%d n_pcs=%d n_neighbors=%d "
+        "leiden_resolution=%.3f scvi_max_epochs=%d seed=%d",
+        batch_key,
+        scvi_batch_key,
+        n_top_genes,
+        n_pcs,
+        n_neighbors,
+        leiden_resolution,
+        max_epochs,
+        seed,
+    )
 
     ensure_obs_key(adata, "study", study)
     ensure_obs_key(adata, "sample_id", study)
@@ -49,12 +62,15 @@ def run_exploration(adata, study: str, cfg: dict):
     ensure_obs_key(adata, scvi_batch_key, study)
 
     adata.layers["counts"] = adata.X.copy()
+    logging.info("Created counts layer")
 
     sc.pp.normalize_total(adata, target_sum=1e4)
     adata.layers["normalized"] = adata.X.copy()
+    logging.info("Completed normalize_total and stored normalized layer")
 
     sc.pp.log1p(adata)
     adata.layers["log1p"] = adata.X.copy()
+    logging.info("Completed log1p and stored log1p layer")
 
     sc.pp.highly_variable_genes(
         adata,
@@ -63,23 +79,29 @@ def run_exploration(adata, study: str, cfg: dict):
         flavor="seurat_v3",
         layer="counts",
     )
+    logging.info("Computed highly variable genes")
 
     adata_hvg = adata[:, adata.var["highly_variable"]].copy()
     adata_hvg.layers["log1p"] = adata_hvg.X.copy()
+    logging.info("Created HVG subset: n_cells=%d n_hvg=%d", adata_hvg.n_obs, adata_hvg.n_vars)
 
     sc.pp.scale(adata_hvg, max_value=10)
     adata_hvg.layers["scaled"] = adata_hvg.X.copy()
+    logging.info("Scaled HVG data")
 
     sc.tl.pca(adata_hvg, n_comps=n_pcs, svd_solver="arpack")
+    logging.info("Computed PCA")
 
     scvi.model.SCVI.setup_anndata(adata_hvg, layer="counts", batch_key=scvi_batch_key)
     model = scvi.model.SCVI(adata_hvg)
     model.train(max_epochs=max_epochs)
     adata_hvg.obsm["X_scVI"] = model.get_latent_representation()
+    logging.info("Trained scVI and saved latent representation")
 
     sc.pp.neighbors(adata_hvg, use_rep="X_scVI", n_neighbors=n_neighbors)
     sc.tl.umap(adata_hvg)
     sc.tl.leiden(adata_hvg, key_added="leiden_scvi", resolution=leiden_resolution)
+    logging.info("Computed neighbors, UMAP, and Leiden clusters")
 
     adata.uns.setdefault("qc_preproc", {})
     adata.uns["qc_preproc"]["explore_config"] = {
@@ -98,6 +120,7 @@ def run_exploration(adata, study: str, cfg: dict):
     adata.obsm["X_scVI"] = adata_hvg.obsm["X_scVI"]
     adata.obsm["X_umap"] = adata_hvg.obsm["X_umap"]
     adata.obs["leiden_scvi"] = adata_hvg.obs["leiden_scvi"].astype(str).reindex(adata.obs_names)
+    logging.info("Transferred embeddings and clusters back to full AnnData")
 
     return adata
 
@@ -112,7 +135,9 @@ def main(argv: list[str] | None = None):
     args = p.parse_args(argv)
 
     setup_logging(args.log)
+    logging.info("explore_scanpy args: %s", vars(args))
     cfg = read_qc_config(args.qc_config)
+    logging.info("Loaded QC config from %s: %s", args.qc_config, cfg)
 
     logging.info("Reading h5ad: %s", args.input)
     adata = sc.read_h5ad(args.input)
@@ -124,6 +149,7 @@ def main(argv: list[str] | None = None):
     out.parent.mkdir(parents=True, exist_ok=True)
     logging.info("Writing output: %s", args.output)
     adata.write_h5ad(str(out), compression="gzip")
+    logging.info("Done writing output: %s", args.output)
 
 
 if __name__ == "__main__":

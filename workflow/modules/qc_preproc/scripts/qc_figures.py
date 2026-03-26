@@ -20,6 +20,7 @@ def setup_logging(log_path: str | None):
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(message)s",
         handlers=handlers,
+        force=True,
     )
 
 
@@ -67,7 +68,9 @@ def main(argv: list[str] | None = None):
     args = p.parse_args(argv)
 
     setup_logging(args.log)
+    logging.info("qc_figures args: %s", vars(args))
     qc = read_qc_config(args.qc_config)
+    logging.info("Loaded QC config from %s: %s", args.qc_config, qc)
     if not bool(qc.get("make_figures", True)):
         logging.info("qc.make_figures is false; writing metrics only")
 
@@ -93,11 +96,13 @@ def main(argv: list[str] | None = None):
     out_metrics = Path(args.output_metrics)
     out_metrics.parent.mkdir(parents=True, exist_ok=True)
     metrics.to_csv(out_metrics, index=False)
+    logging.info("Wrote metrics CSV: %s", out_metrics)
 
     if not bool(qc.get("make_figures", True)):
         for path in (args.output_genes_fig, args.output_counts_fig, args.output_mito_fig):
             Path(path).parent.mkdir(parents=True, exist_ok=True)
             Path(path).touch()
+            logging.info("Created empty figure placeholder: %s", path)
         return
 
     _save_hist(
@@ -117,6 +122,12 @@ def main(argv: list[str] | None = None):
         args.output_mito_fig,
         title=f"{args.study}: mito % (pre-filter)",
         xlabel="pct_counts_mt",
+    )
+    logging.info(
+        "Wrote figures: genes=%s counts=%s mito=%s",
+        args.output_genes_fig,
+        args.output_counts_fig,
+        args.output_mito_fig,
     )
 
 
