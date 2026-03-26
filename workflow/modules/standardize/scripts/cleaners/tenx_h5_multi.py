@@ -55,7 +55,6 @@ def _read_qc_config(study_spec: dict) -> dict | None:
     return {
         "method": method,
         "k": float(qc.get("k", 3.0)),
-        "mito_lower_k": float(qc.get("mito_lower_k", 3.0)),
         "mito_upper_k": float(qc.get("mito_upper_k", 5.0)),
         "mito_gene_prefix": str(qc.get("mito_gene_prefix", "MT-")),
         "miqc_posterior_cutoff": float(qc.get("miqc_posterior_cutoff", 0.75)),
@@ -161,7 +160,6 @@ def _annotate_doublet_scores(a: ad.AnnData, *, qc_cfg: dict, sample_id: str, log
 def _apply_sample_mad_qc(a: ad.AnnData, *, sample_id: str, qc_cfg: dict, log: TextIO) -> ad.AnnData:
     mito_prefix = qc_cfg["mito_gene_prefix"]
     k = qc_cfg["k"]
-    mito_lower_k = qc_cfg["mito_lower_k"]
     mito_upper_k = qc_cfg["mito_upper_k"]
 
     a.var["mt"] = a.var_names.str.upper().str.startswith(mito_prefix.upper())
@@ -192,16 +190,14 @@ def _apply_sample_mad_qc(a: ad.AnnData, *, sample_id: str, qc_cfg: dict, log: Te
 
     mt_metric = "pct_counts_mt"
     _mt_base_lower, _mt_base_upper, mt_median, mt_mad = _mad_bounds(a.obs[mt_metric], 1.0)
-    mt_lower = mt_median - (mito_lower_k * mt_mad)
     mt_upper = mt_median + (mito_upper_k * mt_mad)
     mt_values = a.obs[mt_metric].to_numpy(dtype=float)
-    mt_mask = np.isfinite(mt_values) & (mt_values >= mt_lower) & (mt_values <= mt_upper)
+    mt_mask = np.isfinite(mt_values) & (mt_values <= mt_upper)
     combined_mask &= mt_mask
     threshold_report.append(
         (
             f"{mt_metric}: median={mt_median:.3f}, mad={mt_mad:.3f}, "
-            f"bounds=[{mt_lower:.3f}, {mt_upper:.3f}] "
-            f"(lower_k={mito_lower_k:.2f}, upper_k={mito_upper_k:.2f}), removed={(~mt_mask).sum()}"
+            f"upper<={mt_upper:.3f} (upper_k={mito_upper_k:.2f}), removed={(~mt_mask).sum()}"
         )
     )
 
@@ -216,7 +212,7 @@ def _apply_sample_mad_qc(a: ad.AnnData, *, sample_id: str, qc_cfg: dict, log: Te
 
     log_line(
         log,
-        f"[{sample_id}] QC summary (k={k:.2f}, mito_lower_k={mito_lower_k:.2f}, mito_upper_k={mito_upper_k:.2f}):",
+        f"[{sample_id}] QC summary (k={k:.2f}, mito_upper_k={mito_upper_k:.2f}):",
     )
     log_line(log, f"[{sample_id}]   invalid/empty removed={invalid}")
     for line in threshold_report:
