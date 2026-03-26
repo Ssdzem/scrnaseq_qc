@@ -32,27 +32,18 @@ def ensure_obs_key(adata, key: str, fallback_value: str):
         adata.obs[key] = fallback_value
 
 
-def run_exploration(adata, study: str, cfg: dict):
+def prepare_before_integration(adata, study: str, cfg: dict):
     batch_key = str(cfg.get("hvg_batch_key", "sample_id"))
     scvi_batch_key = str(cfg.get("scvi_batch_key", "sample_id"))
     n_top_genes = int(cfg.get("hvg_n_top_genes", 3000))
-    n_pcs = int(cfg.get("n_pcs", 50))
-    n_neighbors = int(cfg.get("n_neighbors", 15))
-    leiden_resolution = float(cfg.get("leiden_resolution", 1.0))
-    max_epochs = int(cfg.get("scvi_max_epochs", 100))
     seed = int(cfg.get("seed", 0))
     np.random.seed(seed)
     scvi.settings.seed = seed
     logging.info(
-        "Exploration config: batch_key=%s scvi_batch_key=%s n_top_genes=%d n_pcs=%d n_neighbors=%d "
-        "leiden_resolution=%.3f scvi_max_epochs=%d seed=%d",
+        "Pre-integration config: batch_key=%s scvi_batch_key=%s n_top_genes=%d seed=%d",
         batch_key,
         scvi_batch_key,
         n_top_genes,
-        n_pcs,
-        n_neighbors,
-        leiden_resolution,
-        max_epochs,
         seed,
     )
 
@@ -81,9 +72,42 @@ def run_exploration(adata, study: str, cfg: dict):
     )
     logging.info("Computed highly variable genes")
 
-    adata_hvg = adata[:, adata.var["highly_variable"]].copy()
+    adata.uns.setdefault("qc_preproc", {})
+    adata.uns["qc_preproc"]["pre_integration_config"] = {
+        "batch_key": batch_key,
+        "scvi_batch_key": scvi_batch_key,
+        "n_top_genes": n_top_genes,
+        "seed": seed,
+    }
+
+    adata.uns["qc_preproc"]["hvg_var_names"] = adata.var_names[adata.var["highly_variable"]].tolist()
+    logging.info(
+        "Prepared data before integration: n_cells=%d n_vars=%d n_hvg=%d",
+        adata.n_obs,
+        adata.n_vars,
+        len(adata.uns["qc_preproc"]["hvg_var_names"]),
+    )
+    return adata
+
+
+def run_integration(adata, cfg: dict):
+    n_pcs = int(cfg.get("n_pcs", 50))
+    n_neighbors = int(cfg.get("n_neighbors", 15))
+    leiden_resolution = float(cfg.get("leiden_resolution", 1.0))
+    max_epochs = int(cfg.get("scvi_max_epochs", 100))
+    seed = int(cfg.get("seed", 0))
+    np.random.seed(seed)
+    scvi.settings.seed = seed
+
+    pre_cfg = adata.uns.get("qc_preproc", {}).get("pre_integration_config", {})
+    scvi_batch_key = str(pre_cfg.get("scvi_batch_key", cfg.get("scvi_batch_key", "sample_id")))
+    hvg_var_names = list(adata.uns.get("qc_preproc", {}).get("hvg_var_names", []))
+    if not hvg_var_names:
+        raise ValueError("Missing qc_preproc.hvg_var_names; run pre-integration mode first.")
+
+    adata_hvg = adata[:, hvg_var_names].copy()
     adata_hvg.layers["log1p"] = adata_hvg.X.copy()
-    logging.info("Created HVG subset: n_cells=%d n_hvg=%d", adata_hvg.n_obs, adata_hvg.n_vars)
+    logging.info("Created HVG subset for integration: n_cells=%d n_hvg=%d", adata_hvg.n_obs, adata_hvg.n_vars)
 
     sc.pp.scale(adata_hvg, max_value=10)
     adata_hvg.layers["scaled"] = adata_hvg.X.copy()
@@ -104,10 +128,7 @@ def run_exploration(adata, study: str, cfg: dict):
     logging.info("Computed neighbors, UMAP, and Leiden clusters")
 
     adata.uns.setdefault("qc_preproc", {})
-    adata.uns["qc_preproc"]["explore_config"] = {
-        "batch_key": batch_key,
-        "scvi_batch_key": scvi_batch_key,
-        "n_top_genes": n_top_genes,
+    adata.uns["qc_preproc"]["integration_config"] = {
         "n_pcs": n_pcs,
         "n_neighbors": n_neighbors,
         "leiden_resolution": leiden_resolution,
@@ -127,6 +148,7 @@ def run_exploration(adata, study: str, cfg: dict):
 
 def main(argv: list[str] | None = None):
     p = argparse.ArgumentParser()
+    p.add_argument("--mode", choices=["full", "pre", "integration"], default="full")
     p.add_argument("--study", required=True)
     p.add_argument("--input", required=True)
     p.add_argument("--qc-config", required=True)
@@ -142,8 +164,12 @@ def main(argv: list[str] | None = None):
     logging.info("Reading h5ad: %s", args.input)
     adata = sc.read_h5ad(args.input)
 
-    logging.info("Running exploratory preprocessing for: %s", args.study)
-    adata = run_exploration(adata, study=args.study, cfg=cfg)
+    if args.mode in {"full", "pre"}:
+        logging.info("Running pre-integration preprocessing for: %s", args.study)
+        adata = prepare_before_integration(adata, study=args.study, cfg=cfg)
+    if args.mode in {"full", "integration"}:
+        logging.info("Running integration step for: %s", args.study)
+        adata = run_integration(adata, cfg=cfg)
 
     out = Path(args.output)
     out.parent.mkdir(parents=True, exist_ok=True)
