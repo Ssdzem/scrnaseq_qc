@@ -48,7 +48,7 @@ rule qc_all:
         "out/all_studies/.all_raw_done",
         "out/all_studies/.all_explore_done",
     output:
-        touch(expand("out/{study}/qc/.qc_all_done", study=STUDIES))
+        touch("out/all_studies/.qc_all_done")
 
 
 rule qc_pretrim_pictures:
