@@ -12,3 +12,7 @@ dependencies:
   - pyyaml
 
   - scvi-tools
+  - harmonypy
+  - scikit-misc
+  - python-igraph
+  - leidenalg
