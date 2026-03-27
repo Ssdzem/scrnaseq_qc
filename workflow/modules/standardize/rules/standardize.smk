@@ -30,6 +30,7 @@ rule standardize_all:
 rule standardize_study:
     input:
         spec=lambda wc: str(_spec_path_for_study(wc.study)),
+        fetch_done="out/{study}/.fetch_done",
     output:
         h5ad=_study_out_h5ad("{study}"),
     params:
