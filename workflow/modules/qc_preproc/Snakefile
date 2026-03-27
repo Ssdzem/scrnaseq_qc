@@ -2,4 +2,4 @@
 
 include: "rules/qc_preproc.smk"
 
-ruleorder: qc_all > qc_scanpy > qc_trim > qc_pretrim_pictures
+ruleorder: qc_all > qc_study_explore > qc_pretrim_pictures
