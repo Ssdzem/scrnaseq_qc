@@ -1,4 +1,5 @@
 import os
+import shlex
 import shutil
 import sys
 from pathlib import Path
@@ -121,6 +122,27 @@ def _aspera_key_path() -> str:
     return os.environ.get("ASCP_KEY") or (ASPERA_CFG.get("key_path") or "").strip()
 
 
+def _fetch_extra_args() -> str:
+    if not _aspera_enabled():
+        return ""
+    args = [
+        "--aspera",
+        "--ascp-path",
+        _aspera_ascp_path(),
+        "--ascp-key",
+        _aspera_key_path(),
+        "--aspera-host",
+        _aspera_val("host", "ASPERA_HOST"),
+        "--aspera-remote-root",
+        _aspera_val("remote_root", "ASPERA_REMOTE_ROOT"),
+        "--aspera-port",
+        str(ASPERA_CFG.get("port", 33001)),
+        "--aspera-rate",
+        str(ASPERA_CFG.get("rate_limit", "100m")),
+    ]
+    return " ".join(shlex.quote(a) for a in args)
+
+
 ROWS = read_rows(Path(METADATA_CSV))
 assert ROWS, f"No rows parsed from metadata: {METADATA_CSV}"
 
@@ -175,19 +197,18 @@ rule fetch_done:
         touch(f"{OUT_ROOT}/{{study}}/.fetch_done"),
     params:
         out_root=OUT_ROOT,
+        extra_args=lambda wc: _fetch_extra_args(),
+    log:
+        f"{OUT_ROOT}/logs/fetch/fetch_done/{{study}}.log",
     conda:
         os.path.join(MODULE_DIR, "env", "fetch.yaml")
     shell:
-        (
-            "python {input.script} --metadata {input.metadata} --out-root {params.out_root} download-study {wildcards.study} "
-            + ("--aspera " if _aspera_enabled() else "")
-            + ("--ascp-path '" + _aspera_ascp_path() + "' " if _aspera_enabled() else "")
-            + ("--ascp-key '" + _aspera_key_path() + "' " if _aspera_enabled() else "")
-            + ("--aspera-host '" + _aspera_val("host", "ASPERA_HOST") + "' " if _aspera_enabled() else "")
-            + ("--aspera-remote-root '" + _aspera_val("remote_root", "ASPERA_REMOTE_ROOT") + "' " if _aspera_enabled() else "")
-            + ("--aspera-port " + str(ASPERA_CFG.get("port", 33001)) + " " if _aspera_enabled() else "")
-            + ("--aspera-rate '" + str(ASPERA_CFG.get("rate_limit", "100m")) + "'" if _aspera_enabled() else "")
-        )
+        r"""
+        mkdir -p $(dirname {log})
+        set -o pipefail
+        python {input.script} --metadata {input.metadata} --out-root {params.out_root} download-study {wildcards.study} {params.extra_args} \
+          2>&1 | tee -a {log}
+        """
 
 
 rule fetch_study:
@@ -203,35 +224,42 @@ rule fetch_run:
         touch(f"{OUT_ROOT}/{{study}}/fastqs/{{run_id}}/.fetch_done"),
     params:
         out_root=OUT_ROOT,
+        extra_args=lambda wc: _fetch_extra_args(),
+    log:
+        f"{OUT_ROOT}/logs/fetch/fetch_run/{{study}}_{{run_id}}.log",
     conda:
         os.path.join(MODULE_DIR, "env", "fetch.yaml")
     shell:
-        (
-            "python {input.script} --metadata {input.metadata} --out-root {params.out_root} download-run {wildcards.study} {wildcards.run_id} "
-            + ("--aspera " if _aspera_enabled() else "")
-            + ("--ascp-path '" + _aspera_ascp_path() + "' " if _aspera_enabled() else "")
-            + ("--ascp-key '" + _aspera_key_path() + "' " if _aspera_enabled() else "")
-            + ("--aspera-host '" + _aspera_val("host", "ASPERA_HOST") + "' " if _aspera_enabled() else "")
-            + ("--aspera-remote-root '" + _aspera_val("remote_root", "ASPERA_REMOTE_ROOT") + "' " if _aspera_enabled() else "")
-            + ("--aspera-port " + str(ASPERA_CFG.get("port", 33001)) + " " if _aspera_enabled() else "")
-            + ("--aspera-rate '" + str(ASPERA_CFG.get("rate_limit", "100m")) + "'" if _aspera_enabled() else "")
-        )
+        r"""
+        mkdir -p $(dirname {log})
+        set -o pipefail
+        python {input.script} --metadata {input.metadata} --out-root {params.out_root} download-run {wildcards.study} {wildcards.run_id} {params.extra_args} \
+          2>&1 | tee -a {log}
+        """
 
 
 # Allow targeting `data/<study>/.fetch_done` directly when OUT_ROOT is something
 # else (e.g. absolute path). This keeps CLI usage intuitive.
 rule fetch_done_data:
     input:
-        lambda wc: [
-            f"out/{wc.study}/fastqs/{donor_id}/{sample_id}/{run_id}/.fetch_done"
-            for donor_id, sample_id, run_id in sorted(
-                TRIPLES_BY_STUDY_FASTQS.get(wc.study, set())
-            )
-        ]
+        metadata=METADATA_CSV,
+        script=os.path.join(MODULE_DIR, "scripts", "fetch_data.py"),
     output:
         touch("out/{study,[^/]+}/.fetch_done"),
+    params:
+        out_root="out",
+        extra_args=lambda wc: _fetch_extra_args(),
+    log:
+        "out/logs/fetch/fetch_done/{study}.log",
+    conda:
+        os.path.join(MODULE_DIR, "env", "fetch.yaml")
     shell:
-        "true"
+        r"""
+        mkdir -p $(dirname {log})
+        set -o pipefail
+        python {input.script} --metadata {input.metadata} --out-root {params.out_root} download-study {wildcards.study} {params.extra_args} \
+          2>&1 | tee -a {log}
+        """
 
 
 
@@ -245,16 +273,15 @@ rule fetch_run_data:
         touch("out/{study,[^/]+}/fastqs/{donor_id}/{sample_id}/{run_id}/.fetch_done"),
     params:
         out_root="out",
+        extra_args=lambda wc: _fetch_extra_args(),
+    log:
+        "out/logs/fetch/fetch_run/{study}_{run_id}.log",
     conda:
         os.path.join(MODULE_DIR, "env", "fetch.yaml")
     shell:
-        (
-            "python {input.script} --metadata {input.metadata} --out-root {params.out_root} download-run {wildcards.study} {wildcards.run_id} "
-            + ("--aspera " if _aspera_enabled() else "")
-            + ("--ascp-path '" + _aspera_ascp_path() + "' " if _aspera_enabled() else "")
-            + ("--ascp-key '" + _aspera_key_path() + "' " if _aspera_enabled() else "")
-            + ("--aspera-host '" + _aspera_val("host", "ASPERA_HOST") + "' " if _aspera_enabled() else "")
-            + ("--aspera-remote-root '" + _aspera_val("remote_root", "ASPERA_REMOTE_ROOT") + "' " if _aspera_enabled() else "")
-            + ("--aspera-port " + str(ASPERA_CFG.get("port", 33001)) + " " if _aspera_enabled() else "")
-            + ("--aspera-rate '" + str(ASPERA_CFG.get("rate_limit", "100m")) + "'" if _aspera_enabled() else "")
-        )
+        r"""
+        mkdir -p $(dirname {log})
+        set -o pipefail
+        python {input.script} --metadata {input.metadata} --out-root {params.out_root} download-run {wildcards.study} {wildcards.run_id} {params.extra_args} \
+          2>&1 | tee -a {log}
+        """
