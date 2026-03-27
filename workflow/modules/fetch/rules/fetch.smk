@@ -275,7 +275,7 @@ rule fetch_run_data:
         out_root="out",
         extra_args=lambda wc: _fetch_extra_args(),
     log:
-        "out/logs/fetch/fetch_run/{study}_{run_id}.log",
+        "out/logs/fetch/fetch_run/{study}_{donor_id}_{sample_id}_{run_id}.log",
     conda:
         os.path.join(MODULE_DIR, "env", "fetch.yaml")
     shell:
