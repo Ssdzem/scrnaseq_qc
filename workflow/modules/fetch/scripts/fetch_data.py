@@ -386,6 +386,33 @@ def cmd_download_study(
             )
         return
 
+    # Curl mode: download all runs belonging to the study using the
+    # per-run downloader (which applies URL-level hierarchy heuristics and
+    # deduplication across data_nature columns).
+    run_ids: Set[str] = set()
+    for row in rows:
+        rid = (row.get("run_id") or "").strip()
+        if rid and not _is_missing(rid):
+            run_ids.add(rid)
+
+    if not run_ids:
+        raise SystemExit(f"No run_id values found for study {study}")
+
+    for rid in sorted(run_ids):
+        cmd_download_run(
+            metadata_csv=metadata_csv,
+            out_root=out_root,
+            study=study,
+            run_id=rid,
+            use_aspera=False,
+            ascp_path="",
+            key_path="",
+            aspera_host="",
+            aspera_remote_root="",
+            aspera_port=aspera_port,
+            aspera_rate_limit=aspera_rate_limit,
+        )
+
 
 def cmd_download_run(
     metadata_csv: Path,
