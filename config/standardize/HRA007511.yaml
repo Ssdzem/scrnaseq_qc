@@ -1,0 +1,12 @@
+study: "HRA007511"
+process: "hra007511_count_matrix_runs"
+
+input:
+  metadata_csv: "config/liver_scRNAseq_metadata_everything.csv"
+  counts_root: "out/HRA007511/counts/singleton/run"
+  # Optional test knobs:
+  # run_ids: ["HRR1782781"]
+  # max_runs: 1
+
+output:
+  h5ad: "out/HRA007511/raw.h5ad"

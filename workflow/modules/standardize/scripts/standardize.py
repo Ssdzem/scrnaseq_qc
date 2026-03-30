@@ -50,6 +50,15 @@ def main() -> None:
             from cleaners.seurat_rds import run_seurat_rds
 
             run_seurat_rds(study=args.study, study_spec=study_spec, output_h5ad=out_path, log=log)
+        elif process == "hra007511_count_matrix_runs":
+            from cleaners.hra007511_count_matrix_runs import run_hra007511_count_matrix_runs
+
+            run_hra007511_count_matrix_runs(
+                study=args.study,
+                study_spec=study_spec,
+                output_h5ad=out_path,
+                log=log,
+            )
         else:
             raise SystemExit(f"Unknown process '{process}' for study '{args.study}'")
 
