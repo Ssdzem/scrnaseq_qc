@@ -13,7 +13,7 @@ from rtlog import log_kv, log_line
 
 from cleaners.tenx_h5_multi import run_tenx_h5_multi
 
-RAW_COUNTS_RE = re.compile(r"^(?P<gsm>GSM\d+)_[^-]+-(?P<run_id>[^-]+)-raw_counts\.csv(?:\.gz)?$")
+RAW_COUNTS_RE = re.compile(r"^(?P<gsm>GSM\d+)_(?P<label>.+)-raw_counts\.csv(?:\.gz)?$")
 
 
 def _require_path(value: str | None, name: str) -> Path:
@@ -25,23 +25,32 @@ def _require_path(value: str | None, name: str) -> Path:
     return path
 
 
+def _parse_sample_id_from_name(filename: str) -> str | None:
+    match = RAW_COUNTS_RE.match(filename)
+    if not match:
+        return None
+    gsm = match.group("gsm")
+    label = match.group("label")
+    run_id = label.split("-", 1)[1] if "-" in label else label
+    return f"{gsm}_{run_id}"
+
+
 def _pick_raw_count_files(raw_dir: Path) -> list[tuple[str, Path]]:
     grouped: dict[str, list[Path]] = {}
     for p in sorted(raw_dir.iterdir()):
         if not p.is_file():
             continue
-        match = RAW_COUNTS_RE.match(p.name)
-        if not match:
+        sample_id = _parse_sample_id_from_name(p.name)
+        if sample_id is None:
             continue
-        run_id = match.group("run_id")
-        grouped.setdefault(run_id, []).append(p)
+        grouped.setdefault(sample_id, []).append(p)
 
     selected: list[tuple[str, Path]] = []
-    for run_id in sorted(grouped):
-        options = grouped[run_id]
+    for sample_id in sorted(grouped):
+        options = grouped[sample_id]
         plain_csv = [p for p in options if p.suffix == ".csv"]
         chosen = plain_csv[0] if plain_csv else options[0]
-        selected.append((run_id, chosen))
+        selected.append((sample_id, chosen))
     return selected
 
 
@@ -146,8 +155,7 @@ def run_gse202379_raw_counts(*, study: str, study_spec: dict, output_h5ad: Path,
     log_kv(log, "gse202379_raw_counts.start", study=study, raw_dir=raw_dir, samples=len(run_files))
 
     sample_entries: list[dict[str, str]] = []
-    for run_id, csv_path in run_files:
-        sample_id = run_id
+    for sample_id, csv_path in run_files:
         adata = _csv_to_adata(csv_path=csv_path, sample_id=sample_id, log=log)
         sample_h5 = tmp_h5_dir / f"{sample_id}.h5"
         _write_10x_h5_from_adata(adata=adata, out_h5=sample_h5, sample_id=sample_id, log=log)
