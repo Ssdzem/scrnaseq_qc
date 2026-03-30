@@ -25,6 +25,9 @@ def _ensure_gz_tsv(src: Path, dst: Path) -> None:
     If `src` is already gzipped, copy as-is.
     """
 
+    if src.resolve() == dst.resolve():
+        return
+
     if src.suffix == ".gz":
         shutil.copyfile(src, dst)
         return
@@ -42,6 +45,9 @@ def _ensure_gz_bytes(src: Path, dst: Path) -> None:
 
     Some files may end with `.gz` but not actually be gzipped.
     """
+
+    if src.resolve() == dst.resolve():
+        return
 
     if src.suffix == ".gz" and _is_gzip(src):
         shutil.copyfile(src, dst)
