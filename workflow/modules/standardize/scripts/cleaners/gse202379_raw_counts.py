@@ -13,7 +13,7 @@ from rtlog import log_kv, log_line
 
 from cleaners.tenx_h5_multi import run_tenx_h5_multi
 
-RAW_COUNTS_RE = re.compile(r"^(?P<gsm>GSM\d+)_B-(?P<run_id>[^-]+)-raw_counts\.csv(?:\.gz)?$")
+RAW_COUNTS_RE = re.compile(r"^(?P<gsm>GSM\d+)_[^-]+-(?P<run_id>[^-]+)-raw_counts\.csv(?:\.gz)?$")
 
 
 def _require_path(value: str | None, name: str) -> Path:
