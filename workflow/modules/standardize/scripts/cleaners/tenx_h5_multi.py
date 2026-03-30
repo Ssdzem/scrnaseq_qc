@@ -32,12 +32,21 @@ def _normalize_sample_table(samples: list[dict]) -> pd.DataFrame:
         raise SystemExit("'samples' list is empty")
     if "sample_id" not in df.columns:
         raise SystemExit("Each sample entry must contain 'sample_id'")
-    if "h5" not in df.columns:
-        raise SystemExit("Each sample entry must contain 'h5'")
+    has_h5 = "h5" in df.columns
+    has_h5ad = "h5ad" in df.columns
+    if not has_h5 and not has_h5ad:
+        raise SystemExit("Each sample entry must contain either 'h5' or 'h5ad'")
     if df["sample_id"].isna().any():
         raise SystemExit("Some samples are missing 'sample_id'")
-    if df["h5"].isna().any():
-        raise SystemExit("Some samples are missing 'h5'")
+    if has_h5 and has_h5ad:
+        both_missing = df["h5"].isna() & df["h5ad"].isna()
+        if both_missing.any():
+            raise SystemExit("Some samples are missing both 'h5' and 'h5ad'")
+    elif has_h5:
+        if df["h5"].isna().any():
+            raise SystemExit("Some samples are missing 'h5'")
+    elif has_h5ad and df["h5ad"].isna().any():
+        raise SystemExit("Some samples are missing 'h5ad'")
     if df["sample_id"].duplicated().any():
         dups = sorted(df.loc[df["sample_id"].duplicated(), "sample_id"].astype(str).unique())
         raise SystemExit(f"Duplicate sample_id values in spec: {dups}")
@@ -226,16 +235,48 @@ def _apply_sample_mad_qc(a: ad.AnnData, *, sample_id: str, qc_cfg: dict, log: Te
     return a[combined_mask].copy()
 
 
-def _finalize_tenx_multi(
-    *,
-    study: str,
-    inp: dict,
-    adatas: list[ad.AnnData],
-    output_h5ad: Path,
-    log: TextIO,
-) -> None:
-    if not adatas:
-        raise SystemExit(f"[{study}] No samples to concatenate")
+def run_tenx_h5_multi(*, study: str, study_spec: dict, output_h5ad: Path, log: TextIO) -> None:
+    inp = study_spec.get("input", {})
+    samples = _require_list(inp.get("samples"), "input.samples")
+    samples_df = _normalize_sample_table(samples)
+    qc_cfg = _read_qc_config(study_spec)
+    log_kv(log, "tenx_h5_multi.start", study=study, samples=len(samples_df))
+    if qc_cfg is None:
+        log_line(log, f"[{study}] QC disabled (input.qc missing)")
+    else:
+        log_line(log, f"[{study}] QC config={qc_cfg}")
+
+    adatas: list[ad.AnnData] = []
+    for row in samples_df.itertuples(index=False):
+        sample_id = str(row.sample_id)
+        h5_val = getattr(row, 'h5', None)
+        h5ad_val = getattr(row, 'h5ad', None)
+        if isinstance(h5_val, float) and pd.isna(h5_val):
+            h5_val = None
+        if isinstance(h5ad_val, float) and pd.isna(h5ad_val):
+            h5ad_val = None
+
+        if h5_val:
+            h5_path = _require_path(str(h5_val), f"samples[{sample_id}].h5")
+            log_line(log, f"[{study}] Reading 10x h5: {h5_path} (sample_id={sample_id})")
+            a = sc.read_10x_h5(str(h5_path))
+        elif h5ad_val:
+            h5ad_path = _require_path(str(h5ad_val), f"samples[{sample_id}].h5ad")
+            log_line(log, f"[{study}] Reading h5ad: {h5ad_path} (sample_id={sample_id})")
+            a = sc.read_h5ad(str(h5ad_path))
+        else:
+            raise SystemExit(f"Sample '{sample_id}' missing both h5 and h5ad")
+        a.var_names_make_unique()
+        a.obs["sample_id"] = sample_id
+        a.obs["study_accession"] = study
+        log_line(log, f"[{study}] Loaded {sample_id}: n_obs={a.n_obs} n_vars={a.n_vars}")
+
+        if qc_cfg is not None:
+            before = a.n_obs
+            a = _apply_sample_mad_qc(a, sample_id=sample_id, qc_cfg=qc_cfg, log=log)
+            log_line(log, f"[{study}] QC-filtered {sample_id}: n_obs={before} -> {a.n_obs}")
+
+        adatas.append(a)
 
     log_line(log, f"[{study}] Concatenating {len(adatas)} samples")
     merged = ad.concat(adatas, axis=0, join="outer", label=None, merge="same", index_unique="-")

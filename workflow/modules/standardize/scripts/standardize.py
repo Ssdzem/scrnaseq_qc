@@ -55,6 +55,14 @@ def main() -> None:
 
             run_gse202379_raw_counts(
                 study=args.study, study_spec=study_spec, output_h5ad=out_path, log=log
+        elif process == "hra007511_count_matrix_runs":
+            from cleaners.hra007511_count_matrix_runs import run_hra007511_count_matrix_runs
+
+            run_hra007511_count_matrix_runs(
+                study=args.study,
+                study_spec=study_spec,
+                output_h5ad=out_path,
+                log=log,
             )
         else:
             raise SystemExit(f"Unknown process '{process}' for study '{args.study}'")
