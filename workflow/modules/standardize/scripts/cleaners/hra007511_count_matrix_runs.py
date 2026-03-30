@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import TextIO
 
@@ -49,7 +50,11 @@ def _run_counts_triplet_dir(*, counts_root: Path, donor_id: str, sample_id: str,
 def _select_runs_for_execution(*, run_df: pd.DataFrame, inp: dict, log: TextIO) -> pd.DataFrame:
     selected = run_df.copy()
 
+    env_run_ids = os.getenv("HRA007511_RUN_IDS", "").strip()
     selected_run_ids = inp.get("run_ids")
+    if env_run_ids:
+        selected_run_ids = [x.strip() for x in env_run_ids.split(",") if x.strip()]
+
     if selected_run_ids is not None:
         if not isinstance(selected_run_ids, list) or not selected_run_ids:
             raise SystemExit("input.run_ids must be a non-empty list of run_id values")
@@ -59,7 +64,10 @@ def _select_runs_for_execution(*, run_df: pd.DataFrame, inp: dict, log: TextIO) 
             raise SystemExit("input.run_ids did not match any included run_id for this study")
         log_line(log, f"Selected runs by input.run_ids: {sorted(selected_set)}")
 
+    env_max_runs = os.getenv("HRA007511_MAX_RUNS", "").strip()
     max_runs = inp.get("max_runs")
+    if env_max_runs:
+        max_runs = env_max_runs
     if max_runs is not None:
         try:
             max_runs_int = int(max_runs)

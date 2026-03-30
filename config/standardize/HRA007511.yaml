@@ -4,9 +4,13 @@ process: "hra007511_count_matrix_runs"
 input:
   metadata_csv: "config/liver_scRNAseq_metadata_everything.csv"
   counts_root: "out/HRA007511/counts/singleton/run"
-  # Optional test knobs:
+  # Optional test knobs (YAML):
   # run_ids: ["HRR1782781"]
   # max_runs: 1
+  #
+  # Optional test knobs (no YAML edits):
+  # HRA007511_RUN_IDS=HRR1782781
+  # HRA007511_MAX_RUNS=1
 
 output:
   h5ad: "out/HRA007511/raw.h5ad"
