@@ -1,9 +1,8 @@
 study: "GSE202379"
-process: "seurat_rds"
+process: "gse202379_raw_counts"
 
 input:
-  rds: "out/GSE202379/qconly/GSE202379_SeuratObject_AllCells.rds"
+  raw_dir: "out/GSE202379/raw"
 
 output:
   h5ad: "out/GSE202379/raw.h5ad"
-

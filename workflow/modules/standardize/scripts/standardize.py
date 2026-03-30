@@ -50,6 +50,12 @@ def main() -> None:
             from cleaners.seurat_rds import run_seurat_rds
 
             run_seurat_rds(study=args.study, study_spec=study_spec, output_h5ad=out_path, log=log)
+        elif process == "gse202379_raw_counts":
+            from cleaners.gse202379_raw_counts import run_gse202379_raw_counts
+
+            run_gse202379_raw_counts(
+                study=args.study, study_spec=study_spec, output_h5ad=out_path, log=log
+            )
         else:
             raise SystemExit(f"Unknown process '{process}' for study '{args.study}'")
 
