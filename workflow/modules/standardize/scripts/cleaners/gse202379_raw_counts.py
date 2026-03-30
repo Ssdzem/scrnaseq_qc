@@ -153,6 +153,18 @@ def run_gse202379_raw_counts(*, study: str, study_spec: dict, output_h5ad: Path,
         _write_10x_h5_from_adata(adata=adata, out_h5=sample_h5, sample_id=sample_id, log=log)
         sample_entries.append({"sample_id": sample_id, "h5": str(sample_h5)})
 
-    delegated_spec = {"input": {"samples": sample_entries, "qc": inp.get("qc"), "metadata": inp.get("metadata")}}
+    qc_cfg = inp.get("qc")
+    if not qc_cfg:
+        qc_cfg = {
+            "method": "mad",
+            "k": 3.0,
+            "mito_upper_k": 5.0,
+            "mito_gene_prefix": "MT-",
+            "miqc_posterior_cutoff": 0.75,
+            "doublet_score_threshold": 0.25,
+        }
+        log_line(log, f"[{study}] input.qc missing; applying default MAD QC config: {qc_cfg}")
+
+    delegated_spec = {"input": {"samples": sample_entries, "qc": qc_cfg, "metadata": inp.get("metadata")}}
     run_tenx_h5_multi(study=study, study_spec=delegated_spec, output_h5ad=output_h5ad, log=log)
     log_kv(log, "gse202379_raw_counts.complete", study=study, output=output_h5ad)
