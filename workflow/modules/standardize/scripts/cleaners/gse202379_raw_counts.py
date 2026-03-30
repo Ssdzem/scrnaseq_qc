@@ -10,7 +10,7 @@ import pandas as pd
 from scipy import sparse
 from rtlog import log_kv, log_line
 
-from cleaners.tenx_h5_multi import run_tenx_h5_multi
+from cleaners.tenx_h5_multi import run_tenx_adata_multi
 
 RAW_COUNTS_RE = re.compile(r"^(?P<gsm>GSM\d+)_B-(?P<run_id>[^-]+)-raw_counts\.csv(?:\.gz)?$")
 
@@ -68,7 +68,7 @@ def _infer_needs_transpose(df: pd.DataFrame) -> bool:
     return row_gene_like >= col_gene_like
 
 
-def _csv_to_h5ad(*, csv_path: Path, sample_id: str, out_h5ad: Path, log: TextIO) -> None:
+def _csv_to_adata(*, csv_path: Path, sample_id: str, log: TextIO) -> ad.AnnData:
     log_line(log, f"[{sample_id}] Reading raw counts CSV: {csv_path}")
     df = pd.read_csv(csv_path, index_col=0)
     if df.empty:
@@ -91,17 +91,13 @@ def _csv_to_h5ad(*, csv_path: Path, sample_id: str, out_h5ad: Path, log: TextIO)
     )
     adata.obs_names_make_unique()
     adata.var_names_make_unique()
-
-    out_h5ad.parent.mkdir(parents=True, exist_ok=True)
-    adata.write_h5ad(out_h5ad)
-    log_line(log, f"[{sample_id}] Wrote intermediate h5ad: {out_h5ad}")
+    log_line(log, f"[{sample_id}] Built AnnData in-memory: n_obs={adata.n_obs} n_vars={adata.n_vars}")
+    return adata
 
 
 def run_gse202379_raw_counts(*, study: str, study_spec: dict, output_h5ad: Path, log: TextIO) -> None:
     inp = study_spec.get("input", {})
     raw_dir = _require_path(inp.get("raw_dir"), "raw_dir")
-    tmp_root = output_h5ad.parent / ".tmp" / f"{study}_raw_count_h5ad"
-    tmp_root.mkdir(parents=True, exist_ok=True)
 
     run_files = _pick_raw_count_files(raw_dir)
     if not run_files:
@@ -111,19 +107,18 @@ def run_gse202379_raw_counts(*, study: str, study_spec: dict, output_h5ad: Path,
 
     log_kv(log, "gse202379_raw_counts.start", study=study, raw_dir=raw_dir, samples=len(run_files))
 
-    sample_entries: list[dict[str, str]] = []
+    sample_adatas: list[tuple[str, ad.AnnData]] = []
     for run_id, csv_path in run_files:
         sample_id = run_id
-        sample_h5ad = tmp_root / f"{sample_id}.h5ad"
-        _csv_to_h5ad(csv_path=csv_path, sample_id=sample_id, out_h5ad=sample_h5ad, log=log)
-        sample_entries.append({"sample_id": sample_id, "h5ad": str(sample_h5ad)})
+        adata = _csv_to_adata(csv_path=csv_path, sample_id=sample_id, log=log)
+        sample_adatas.append((sample_id, adata))
 
-    delegated_spec = {
-        "input": {
-            "samples": sample_entries,
-            "qc": inp.get("qc"),
-            "metadata": inp.get("metadata"),
-        }
-    }
-    run_tenx_h5_multi(study=study, study_spec=delegated_spec, output_h5ad=output_h5ad, log=log)
+    delegated_spec = {"input": {"qc": inp.get("qc"), "metadata": inp.get("metadata")}}
+    run_tenx_adata_multi(
+        study=study,
+        study_spec=delegated_spec,
+        sample_adatas=sample_adatas,
+        output_h5ad=output_h5ad,
+        log=log,
+    )
     log_kv(log, "gse202379_raw_counts.complete", study=study, output=output_h5ad)
