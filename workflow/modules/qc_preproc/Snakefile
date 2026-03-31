@@ -5,4 +5,4 @@ configfile: "config/qc.yaml"
 include: "rules/qc_preproc.smk"
 
 # Keep ruleorder aligned with rules that actually exist in this module.
-ruleorder: qc_all > qc_study_explore > qc_study_pre_integration > qc_pretrim_pictures > qc_all_explore > qc_all_pre_integration > qc_concat_all_raw
+ruleorder: qc_all > qc_study_explore > qc_study_pre_integration > qc_pretrim_pictures > qc_attach_metadata > qc_all_explore > qc_all_pre_integration > qc_concat_all_raw

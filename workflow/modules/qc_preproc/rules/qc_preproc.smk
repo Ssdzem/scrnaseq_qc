@@ -35,6 +35,10 @@ def _study_raw_h5ad(study: str) -> str:
     return f"out/{study}/raw.h5ad"
 
 
+def _study_raw_metadata_h5ad(study: str) -> str:
+    return f"out/{study}/raw_metadata.h5ad"
+
+
 def _qc_log(study: str) -> str:
     return f"out/logs/qc/{study}.log"
 
@@ -62,6 +66,7 @@ def _study_explore_mode() -> str:
 rule qc_all:
     input:
         qc_config=QC_CONFIG_PATH,
+        raw_metadata_done=expand("out/{study}/qc/.raw_metadata_done", study=STUDIES),
         pretrim_done=expand("out/{study}/qc/.pretrim_pictures_done", study=STUDIES),
         study_explore_done=expand("out/{study}/qc/.study_explore_done", study=STUDIES),
         all_raw_done="out/all_studies/.all_raw_done",
@@ -70,10 +75,41 @@ rule qc_all:
         touch("out/all_studies/.qc_all_done")
 
 
+rule qc_attach_metadata:
+    input:
+        raw=lambda wc: _study_raw_h5ad(wc.study),
+        qc_config=QC_CONFIG_PATH,
+    output:
+        raw_metadata="out/{study}/raw_metadata.h5ad",
+        done=touch("out/{study}/qc/.raw_metadata_done"),
+    params:
+        study=lambda wc: wc.study,
+    log:
+        _qc_log("{study}")
+    conda:
+        "../env/qc_preproc_py.yaml"
+    shell:
+        r"""
+        mkdir -p $(dirname {log})
+        {{
+          echo "[$(date -Is)] [qc_attach_metadata] study={params.study}"
+          echo "[$(date -Is)] INPUT raw={input.raw}"
+          echo "[$(date -Is)] INPUT qc_config={input.qc_config}"
+          echo "[$(date -Is)] OUTPUT raw_metadata={output.raw_metadata}"
+          $CONDA_PREFIX/bin/python workflow/modules/qc_preproc/scripts/attach_metadata.py \
+          --study {params.study} \
+          --input {input.raw} \
+          --qc-config {input.qc_config} \
+          --output {output.raw_metadata}
+        }} 2>&1 | tee -a {log}
+        """
+
+
 rule qc_pretrim_pictures:
     input:
-        h5ad=lambda wc: _study_raw_h5ad(wc.study),
+        h5ad=lambda wc: _study_raw_metadata_h5ad(wc.study),
         qc_config=QC_CONFIG_PATH,
+        raw_metadata_done="out/{study}/qc/.raw_metadata_done",
     output:
         metrics="out/{study}/qc/pre_filter_metrics.csv",
         genes="out/{study}/qc/pictures/pre_filter_genes_per_cell.png",
@@ -94,6 +130,7 @@ rule qc_pretrim_pictures:
           echo "[$(date -Is)] [qc_pretrim_pictures] study={params.study}"
           echo "[$(date -Is)] INPUT input_h5ad={input.h5ad}"
           echo "[$(date -Is)] INPUT qc_config={input.qc_config}"
+          echo "[$(date -Is)] INPUT raw_metadata_done={input.raw_metadata_done}"
           echo "[$(date -Is)] OUTPUT metrics={output.metrics}"
           echo "[$(date -Is)] OUTPUT genes={output.genes}"
           echo "[$(date -Is)] OUTPUT counts={output.counts}"
@@ -147,7 +184,7 @@ rule qc_study_explore:
 
 rule qc_study_pre_integration:
     input:
-        raw=lambda wc: _study_raw_h5ad(wc.study),
+        raw=lambda wc: _study_raw_metadata_h5ad(wc.study),
         qc_config=QC_CONFIG_PATH,
         pretrim_done="out/{study}/qc/.pretrim_pictures_done",
     output:
@@ -181,7 +218,7 @@ rule qc_study_pre_integration:
 rule qc_concat_all_raw:
     input:
         qc_config=QC_CONFIG_PATH,
-        h5ads=expand("out/{study}/raw.h5ad", study=STUDIES),
+        h5ads=expand("out/{study}/raw_metadata.h5ad", study=STUDIES),
     output:
         all_raw="out/all_studies/all_raw.h5ad",
         done=touch("out/all_studies/.all_raw_done"),
