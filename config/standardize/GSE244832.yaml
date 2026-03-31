@@ -1,12 +1,21 @@
 study: "GSE244832"
-process: "count_matrix_10x"
 
 input:
   matrix: "out/GSE244832/qconly/processed_files/hLIVER_counts.mtx.gz"
   genes: "out/GSE244832/qconly/processed_files/hLIVER_genes.csv"
   barcodes: "out/GSE244832/qconly/processed_files/hLIVER_cells.csv"
   metadata: "out/GSE244832/qconly/processed_files/hLIVER_metadata.csv"
+  qc:
+    method: "mad"
+    k: 3
+    mito_upper_k: 5
+    mito_gene_prefix: "MT-"
+    miqc_posterior_cutoff: 0.75
+    doublet_score_threshold: 0.25
+
+pipeline:
+  cleaner1: "count_matrix_10x.py"
+  cleaner2: "tenx_h5_multi.py"
 
 output:
   h5ad: "out/GSE244832/raw.h5ad"
-

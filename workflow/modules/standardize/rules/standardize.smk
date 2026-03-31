@@ -19,6 +19,18 @@ def _study_out_h5ad(study: str) -> str:
     return f"out/{study}/raw.h5ad"
 
 
+def _looks_like_path(value: str) -> bool:
+    if not isinstance(value, str):
+        return False
+    v = value.strip()
+    if not v:
+        return False
+    # Avoid treating IDs/labels (e.g., sample_id) as files.
+    if "/" in v or "\\" in v:
+        return True
+    return any(v.endswith(ext) for ext in [".h5", ".h5ad", ".mtx", ".mtx.gz", ".csv", ".csv.gz", ".tsv", ".tsv.gz", ".rds"])
+
+
 STUDIES = _studies_to_process()
 
 
@@ -36,7 +48,7 @@ def _required_spec_input_paths(study: str) -> list[str]:
 
     # Flat key/value paths (e.g., seurat_rds / count_matrix_10x specs).
     for v in inp.values():
-        if isinstance(v, str):
+        if isinstance(v, str) and _looks_like_path(v):
             paths.append(v)
 
     # Nested sample list paths (e.g., tenx_h5_multi specs).
