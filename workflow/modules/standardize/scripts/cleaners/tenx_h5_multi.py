@@ -235,48 +235,16 @@ def _apply_sample_mad_qc(a: ad.AnnData, *, sample_id: str, qc_cfg: dict, log: Te
     return a[combined_mask].copy()
 
 
-def run_tenx_h5_multi(*, study: str, study_spec: dict, output_h5ad: Path, log: TextIO) -> None:
-    inp = study_spec.get("input", {})
-    samples = _require_list(inp.get("samples"), "input.samples")
-    samples_df = _normalize_sample_table(samples)
-    qc_cfg = _read_qc_config(study_spec)
-    log_kv(log, "tenx_h5_multi.start", study=study, samples=len(samples_df))
-    if qc_cfg is None:
-        log_line(log, f"[{study}] QC disabled (input.qc missing)")
-    else:
-        log_line(log, f"[{study}] QC config={qc_cfg}")
-
-    adatas: list[ad.AnnData] = []
-    for row in samples_df.itertuples(index=False):
-        sample_id = str(row.sample_id)
-        h5_val = getattr(row, 'h5', None)
-        h5ad_val = getattr(row, 'h5ad', None)
-        if isinstance(h5_val, float) and pd.isna(h5_val):
-            h5_val = None
-        if isinstance(h5ad_val, float) and pd.isna(h5ad_val):
-            h5ad_val = None
-
-        if h5_val:
-            h5_path = _require_path(str(h5_val), f"samples[{sample_id}].h5")
-            log_line(log, f"[{study}] Reading 10x h5: {h5_path} (sample_id={sample_id})")
-            a = sc.read_10x_h5(str(h5_path))
-        elif h5ad_val:
-            h5ad_path = _require_path(str(h5ad_val), f"samples[{sample_id}].h5ad")
-            log_line(log, f"[{study}] Reading h5ad: {h5ad_path} (sample_id={sample_id})")
-            a = sc.read_h5ad(str(h5ad_path))
-        else:
-            raise SystemExit(f"Sample '{sample_id}' missing both h5 and h5ad")
-        a.var_names_make_unique()
-        a.obs["sample_id"] = sample_id
-        a.obs["study_accession"] = study
-        log_line(log, f"[{study}] Loaded {sample_id}: n_obs={a.n_obs} n_vars={a.n_vars}")
-
-        if qc_cfg is not None:
-            before = a.n_obs
-            a = _apply_sample_mad_qc(a, sample_id=sample_id, qc_cfg=qc_cfg, log=log)
-            log_line(log, f"[{study}] QC-filtered {sample_id}: n_obs={before} -> {a.n_obs}")
-
-        adatas.append(a)
+def _finalize_tenx_multi(
+    *,
+    study: str,
+    inp: dict,
+    adatas: list[ad.AnnData],
+    output_h5ad: Path,
+    log: TextIO,
+) -> None:
+    if not adatas:
+        raise SystemExit(f"[{study}] No sample adatas were provided")
 
     log_line(log, f"[{study}] Concatenating {len(adatas)} samples")
     merged = ad.concat(adatas, axis=0, join="outer", label=None, merge="same", index_unique="-")
@@ -314,6 +282,48 @@ def run_tenx_h5_multi(*, study: str, study_spec: dict, output_h5ad: Path, log: T
     log_kv(log, "tenx_h5_multi.complete", study=study, output=output_h5ad)
 
 
+def run_tenx_h5_multi(*, study: str, study_spec: dict, output_h5ad: Path, log: TextIO) -> None:
+    inp = study_spec.get("input", {})
+    samples = _require_list(inp.get("samples"), "input.samples")
+    samples_df = _normalize_sample_table(samples)
+    qc_cfg = _read_qc_config(study_spec)
+    log_kv(log, "tenx_h5_multi.start", study=study, samples=len(samples_df))
+    if qc_cfg is None:
+        log_line(log, f"[{study}] QC disabled (input.qc missing)")
+    else:
+        log_line(log, f"[{study}] QC config={qc_cfg}")
+
+    sample_adatas: list[tuple[str, ad.AnnData]] = []
+    for row in samples_df.itertuples(index=False):
+        sample_id = str(row.sample_id)
+        h5_val = getattr(row, 'h5', None)
+        h5ad_val = getattr(row, 'h5ad', None)
+        if isinstance(h5_val, float) and pd.isna(h5_val):
+            h5_val = None
+        if isinstance(h5ad_val, float) and pd.isna(h5ad_val):
+            h5ad_val = None
+
+        if h5_val:
+            h5_path = _require_path(str(h5_val), f"samples[{sample_id}].h5")
+            log_line(log, f"[{study}] Reading 10x h5: {h5_path} (sample_id={sample_id})")
+            a = sc.read_10x_h5(str(h5_path))
+        elif h5ad_val:
+            h5ad_path = _require_path(str(h5ad_val), f"samples[{sample_id}].h5ad")
+            log_line(log, f"[{study}] Reading h5ad: {h5ad_path} (sample_id={sample_id})")
+            a = sc.read_h5ad(str(h5ad_path))
+        else:
+            raise SystemExit(f"Sample '{sample_id}' missing both h5 and h5ad")
+        sample_adatas.append((sample_id, a))
+
+    run_tenx_adata_multi(
+        study=study,
+        study_spec=study_spec,
+        sample_adatas=sample_adatas,
+        output_h5ad=output_h5ad,
+        log=log,
+    )
+
+
 def run_tenx_adata_multi(
     *,
     study: str,
@@ -347,21 +357,3 @@ def run_tenx_adata_multi(
 
     _finalize_tenx_multi(study=study, inp=inp, adatas=adatas, output_h5ad=output_h5ad, log=log)
 
-
-def run_tenx_h5_multi(*, study: str, study_spec: dict, output_h5ad: Path, log: TextIO) -> None:
-    inp = study_spec.get("input", {})
-    samples = _require_list(inp.get("samples"), "input.samples")
-    samples_df = _normalize_sample_table(samples)
-    sample_adatas: list[tuple[str, ad.AnnData]] = []
-    for row in samples_df.itertuples(index=False):
-        sample_id = str(row.sample_id)
-        h5_path = _require_path(str(row.h5), f"samples[{sample_id}].h5")
-        log_line(log, f"[{study}] Reading 10x h5: {h5_path} (sample_id={sample_id})")
-        sample_adatas.append((sample_id, sc.read_10x_h5(str(h5_path))))
-    run_tenx_adata_multi(
-        study=study,
-        study_spec=study_spec,
-        sample_adatas=sample_adatas,
-        output_h5ad=output_h5ad,
-        log=log,
-    )
