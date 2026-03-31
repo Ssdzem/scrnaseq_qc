@@ -10,6 +10,7 @@ import pandas as pd
 import scanpy as sc
 
 
+
 def _require_path(value: str | None, name: str) -> Path:
     if not value:
         raise SystemExit(f"Missing required input '{name}'")
@@ -283,6 +284,8 @@ def _write_genes_from_features(features_tsv_gz: Path, genes_tsv_gz: Path) -> Non
             else:
                 gid, gsym = parts[0], parts[1]
             fout.write(f"{gid}\t{gsym}\n")
+
+
 
 
 def run_count_matrix_10x(*, study: str, study_spec: dict, output_h5ad: Path, log: TextIO) -> None:

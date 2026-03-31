@@ -1,8 +1,10 @@
 import argparse
 import json
+from collections.abc import Sequence
 from pathlib import Path
 
 import yaml
+from cleaner_registry import CLEANER_REGISTRY, normalize_cleaner_name
 from rtlog import log_kv, log_line
 
 
@@ -15,6 +17,129 @@ def _ensure_parent(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
 
 
+def _pipeline_cleaners(study_spec: dict) -> list[str]:
+    pipeline = study_spec.get("pipeline")
+    if pipeline is None:
+        pipeline = study_spec.get("Pipeline")
+    if pipeline is None:
+        raise SystemExit("Missing required 'pipeline' in spec")
+
+    if isinstance(pipeline, Sequence) and not isinstance(pipeline, str):
+        cleaners = [normalize_cleaner_name(v) for v in pipeline if str(v).strip()]
+    elif isinstance(pipeline, dict):
+        # YAML mapping order is preserved.
+        cleaners = [normalize_cleaner_name(v) for _k, v in pipeline.items() if str(v).strip()]
+    else:
+        raise SystemExit("Invalid 'pipeline' format. Use a list or mapping of cleaner names.")
+
+    if not cleaners:
+        raise SystemExit("Pipeline is empty")
+    unknown = [c for c in cleaners if c not in CLEANER_REGISTRY]
+    if unknown:
+        raise SystemExit(f"Unknown cleaners in pipeline: {unknown}")
+    return cleaners
+
+
+def _run_cleaner(
+    *,
+    cleaner: str,
+    study: str,
+    study_spec: dict,
+    output_h5ad: Path,
+    log,
+) -> None:
+    if cleaner == "count_matrix_10x":
+        from cleaners.count_matrix_10x import run_count_matrix_10x
+
+        run_count_matrix_10x(study=study, study_spec=study_spec, output_h5ad=output_h5ad, log=log)
+    elif cleaner == "tenx_h5_multi":
+        from cleaners.tenx_h5_multi import run_tenx_h5_multi
+
+        run_tenx_h5_multi(study=study, study_spec=study_spec, output_h5ad=output_h5ad, log=log)
+    elif cleaner == "metadata_join":
+        from cleaners.metadata_join import run_metadata_join
+
+        run_metadata_join(study=study, study_spec=study_spec, output_h5ad=output_h5ad, log=log)
+    elif cleaner == "seurat_rds":
+        from cleaners.seurat_rds import run_seurat_rds
+
+        run_seurat_rds(study=study, study_spec=study_spec, output_h5ad=output_h5ad, log=log)
+    elif cleaner == "gse202379_raw_counts":
+        from cleaners.gse202379_raw_counts import run_gse202379_raw_counts
+
+        run_gse202379_raw_counts(study=study, study_spec=study_spec, output_h5ad=output_h5ad, log=log)
+    elif cleaner == "hra007511_count_matrix_runs":
+        from cleaners.hra007511_count_matrix_runs import run_hra007511_count_matrix_runs
+
+        run_hra007511_count_matrix_runs(
+            study=study,
+            study_spec=study_spec,
+            output_h5ad=output_h5ad,
+            log=log,
+        )
+    else:
+        raise SystemExit(f"Cleaner '{cleaner}' is not wired in _run_cleaner")
+
+
+def _run_pipeline(*, study: str, study_spec: dict, output_h5ad: Path, log) -> None:
+    cleaners = _pipeline_cleaners(study_spec)
+    inp = dict(study_spec.get("input") or {})
+    sample_id = str(inp.get("sample_id", study)).strip() or study
+
+    prev_h5ad: Path | None = None
+    metadata_already_joined = False
+    for idx, cleaner in enumerate(cleaners):
+        is_last = idx == len(cleaners) - 1
+        out_path = output_h5ad if is_last else output_h5ad.parent / ".tmp" / f"{study}.pipeline.{idx + 1}.{cleaner}.h5ad"
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+
+        log_kv(log, "pipeline.cleaner.start", study=study, cleaner=cleaner, step=idx + 1, output=out_path)
+
+        if cleaner == "count_matrix_10x":
+            local_spec = {"input": inp}
+        elif cleaner == "metadata_join":
+            source_h5ad = prev_h5ad if prev_h5ad is not None else inp.get("h5ad")
+            if not source_h5ad:
+                raise SystemExit(
+                    "Pipeline step 'metadata_join' requires a previous h5ad output or input.h5ad in spec."
+                )
+            local_spec = {
+                "input": {
+                    "h5ad": str(source_h5ad),
+                    "metadata": inp.get("metadata"),
+                    "join_column": inp.get("join_column"),
+                    "obs_key": inp.get("obs_key"),
+                }
+            }
+            metadata_already_joined = True
+        elif cleaner == "tenx_h5_multi":
+            source_h5ad = prev_h5ad if prev_h5ad is not None else inp.get("h5ad")
+            if not source_h5ad:
+                raise SystemExit(
+                    "Pipeline step 'tenx_h5_multi' requires a previous h5ad output or input.h5ad in spec."
+                )
+            local_spec = {
+                "input": {
+                    "samples": [{"sample_id": sample_id, "h5ad": str(source_h5ad)}],
+                    "metadata": None if metadata_already_joined else inp.get("metadata"),
+                    "qc": inp.get("qc"),
+                }
+            }
+        else:
+            local_spec = study_spec
+
+        _run_cleaner(
+            cleaner=cleaner,
+            study=study,
+            study_spec=local_spec,
+            output_h5ad=out_path,
+            log=log,
+        )
+
+        prev_h5ad = out_path
+        log_kv(log, "pipeline.cleaner.complete", study=study, cleaner=cleaner, step=idx + 1, output=out_path)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Standardize study outputs to a canonical .h5ad")
     parser.add_argument("--spec", required=True)
@@ -24,10 +149,6 @@ def main() -> None:
     args = parser.parse_args()
 
     study_spec = _load_spec(args.spec)
-    process = study_spec.get("process")
-    if not process:
-        raise SystemExit(f"Missing 'process' in spec: {args.spec}")
-
     out_path = Path(args.output)
     _ensure_parent(out_path)
 
@@ -35,38 +156,9 @@ def main() -> None:
     _ensure_parent(log_path)
 
     with open(log_path, "w", encoding="utf-8") as log:
-        log_line(log, json.dumps({"study": args.study, "process": process, "spec": args.spec}), with_ts=False)
-        log_kv(log, "standardize.start", study=args.study, process=process, spec=args.spec)
-
-        if process == "count_matrix_10x":
-            from cleaners.count_matrix_10x import run_count_matrix_10x
-
-            run_count_matrix_10x(study=args.study, study_spec=study_spec, output_h5ad=out_path, log=log)
-        elif process == "tenx_h5_multi":
-            from cleaners.tenx_h5_multi import run_tenx_h5_multi
-
-            run_tenx_h5_multi(study=args.study, study_spec=study_spec, output_h5ad=out_path, log=log)
-        elif process == "seurat_rds":
-            from cleaners.seurat_rds import run_seurat_rds
-
-            run_seurat_rds(study=args.study, study_spec=study_spec, output_h5ad=out_path, log=log)
-        elif process == "gse202379_raw_counts":
-            from cleaners.gse202379_raw_counts import run_gse202379_raw_counts
-
-            run_gse202379_raw_counts(
-                study=args.study, study_spec=study_spec, output_h5ad=out_path, log=log)
-        elif process == "hra007511_count_matrix_runs":
-            from cleaners.hra007511_count_matrix_runs import run_hra007511_count_matrix_runs
-
-            run_hra007511_count_matrix_runs(
-                study=args.study,
-                study_spec=study_spec,
-                output_h5ad=out_path,
-                log=log,
-            )
-        else:
-            raise SystemExit(f"Unknown process '{process}' for study '{args.study}'")
-
+        log_line(log, json.dumps({"study": args.study, "spec": args.spec}), with_ts=False)
+        log_kv(log, "standardize.start", study=args.study, spec=args.spec)
+        _run_pipeline(study=args.study, study_spec=study_spec, output_h5ad=out_path, log=log)
         log_kv(log, "standardize.complete", study=args.study, output=args.output)
 
 
