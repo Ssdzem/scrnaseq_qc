@@ -4,7 +4,7 @@ from pathlib import Path
 
 import yaml
 
-sys.path.insert(0, str((workflow.basedir / "scripts").resolve()))
+sys.path.insert(0, str((Path(workflow.basedir) / "scripts").resolve()))
 from cleaner_registry import CLEANER_REGISTRY, normalize_cleaner_name
 
 
