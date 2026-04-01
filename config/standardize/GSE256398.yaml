@@ -1,5 +1,4 @@
 study: "GSE256398"
-process: "tenx_h5_multi"
 
 input:
 
@@ -67,5 +66,9 @@ input:
       h5: "out/GSE256398/raw/GSM8648657_R3_CB_raw_feature_bc_matrix_filtered.h5"
     - sample_id: "GSM8648658"
       h5: "out/GSE256398/raw/GSM8648658_R5_CB_raw_feature_bc_matrix_filtered.h5"
+
+pipeline:
+  cleaner1: "tenx_h5_multi.py"
+
 output:
   h5ad: "out/GSE256398/raw.h5ad"
