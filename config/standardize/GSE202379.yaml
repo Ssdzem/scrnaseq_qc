@@ -1,5 +1,4 @@
 study: "GSE202379"
-process: "gse202379_raw_counts"
 
 input:
   raw_dir: "out/GSE202379/raw"
@@ -10,6 +9,10 @@ input:
     mito_gene_prefix: "MT-"
     miqc_posterior_cutoff: 0.75
     doublet_score_threshold: 0.25
+
+pipeline:
+  cleaner1: "csv_handler.py"
+  cleaner2: "tenx_h5_multi.py"
 
 output:
   h5ad: "out/GSE202379/raw.h5ad"

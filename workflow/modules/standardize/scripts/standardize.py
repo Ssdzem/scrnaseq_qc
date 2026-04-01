@@ -64,10 +64,10 @@ def _run_cleaner(
         from cleaners.seurat_rds import run_seurat_rds
 
         run_seurat_rds(study=study, study_spec=study_spec, output_h5ad=output_h5ad, log=log)
-    elif cleaner == "gse202379_raw_counts":
-        from cleaners.gse202379_raw_counts import run_gse202379_raw_counts
+    elif cleaner == "csv_handler":
+        from cleaners.csv_handler import run_csv_handler
 
-        run_gse202379_raw_counts(study=study, study_spec=study_spec, output_h5ad=output_h5ad, log=log)
+        run_csv_handler(study=study, study_spec=study_spec, output_h5ad=output_h5ad, log=log)
     elif cleaner == "hra007511_count_matrix_runs":
         from cleaners.hra007511_count_matrix_runs import run_hra007511_count_matrix_runs
 
@@ -83,7 +83,7 @@ def _run_cleaner(
 
 def _run_pipeline(*, study: str, study_spec: dict, output_h5ad: Path, log) -> None:
     cleaners = _pipeline_cleaners(study_spec)
-    inp = dict(study_spec.get("input") or {})
+    inp = study_spec.setdefault("input", {})
     sample_id = str(inp.get("sample_id", study)).strip() or study
 
     prev_h5ad: Path | None = None
@@ -113,18 +113,28 @@ def _run_pipeline(*, study: str, study_spec: dict, output_h5ad: Path, log) -> No
             }
             metadata_already_joined = True
         elif cleaner == "tenx_h5_multi":
-            source_h5ad = prev_h5ad if prev_h5ad is not None else inp.get("h5ad")
-            if not source_h5ad:
-                raise SystemExit(
-                    "Pipeline step 'tenx_h5_multi' requires a previous h5ad output or input.h5ad in spec."
-                )
-            local_spec = {
-                "input": {
-                    "samples": [{"sample_id": sample_id, "h5ad": str(source_h5ad)}],
-                    "metadata": None if metadata_already_joined else inp.get("metadata"),
-                    "qc": inp.get("qc"),
+            provided_samples = inp.get("samples")
+            if isinstance(provided_samples, list) and provided_samples:
+                local_spec = {
+                    "input": {
+                        "samples": provided_samples,
+                        "metadata": None if metadata_already_joined else inp.get("metadata"),
+                        "qc": inp.get("qc"),
+                    }
                 }
-            }
+            else:
+                source_h5ad = prev_h5ad if prev_h5ad is not None else inp.get("h5ad")
+                if not source_h5ad:
+                    raise SystemExit(
+                        "Pipeline step 'tenx_h5_multi' requires input.samples or a previous h5ad output/input.h5ad in spec."
+                    )
+                local_spec = {
+                    "input": {
+                        "samples": [{"sample_id": sample_id, "h5ad": str(source_h5ad)}],
+                        "metadata": None if metadata_already_joined else inp.get("metadata"),
+                        "qc": inp.get("qc"),
+                    }
+                }
         else:
             local_spec = study_spec
 
