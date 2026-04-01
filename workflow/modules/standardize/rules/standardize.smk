@@ -4,7 +4,12 @@ from pathlib import Path
 
 import yaml
 
-sys.path.insert(0, str((Path(workflow.basedir) / "scripts").resolve()))
+# Resolve the module-local scripts directory robustly regardless of whether
+# this file is included from the project root Snakefile or run standalone.
+_THIS_FILE = Path(__file__).resolve()
+_MODULE_DIR = _THIS_FILE.parents[1]  # .../workflow/modules/standardize
+_SCRIPTS_DIR = _MODULE_DIR / "scripts"
+sys.path.insert(0, str(_SCRIPTS_DIR))
 from cleaner_registry import CLEANER_REGISTRY, normalize_cleaner_name
 
 
