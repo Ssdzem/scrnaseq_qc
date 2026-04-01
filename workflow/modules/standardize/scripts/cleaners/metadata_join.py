@@ -32,26 +32,33 @@ def run_metadata_join(*, study: str, study_spec: dict, output_h5ad: Path, log: T
     log.flush()
     md_df = pd.read_csv(metadata_path)
     if join_column not in md_df.columns:
-        raise SystemExit(
-            f"join_column '{join_column}' not found in metadata columns: {sorted(md_df.columns.tolist())}"
-        )
+        unnamed_cols = [col for col in md_df.columns if str(col).strip().lower().startswith("unnamed:")]
+        if unnamed_cols:
+            md_df = md_df.rename(columns={unnamed_cols[0]: join_column})
+        else:
+            md_with_index = pd.read_csv(metadata_path, index_col=0)
+            md_with_index = md_with_index.copy()
+            md_with_index[join_column] = md_with_index.index.astype(str)
+            md_df = md_with_index.reset_index(drop=True)
 
     md_df = md_df.copy()
     md_df[join_column] = md_df[join_column].astype(str)
     md_df = md_df.set_index(join_column)
 
     obs_key = inp.get("obs_key")
+    left = adata.obs.copy()
     if obs_key:
         obs_key = str(obs_key)
-        if obs_key not in adata.obs.columns:
+        if obs_key not in left.columns:
             raise SystemExit(f"obs_key '{obs_key}' not found in adata.obs columns")
-        left = adata.obs.copy()
-        left[obs_key] = left[obs_key].astype(str)
-        adata.obs = left.merge(md_df, left_on=obs_key, right_index=True, how="left", sort=False)
-        adata.obs.index = adata.obs_names
     else:
-        adata.obs.index = adata.obs.index.astype(str)
-        adata.obs = adata.obs.join(md_df, how="left")
+        obs_key = join_column
+        if obs_key not in left.columns:
+            left[obs_key] = adata.obs_names.astype(str)
+
+    left[obs_key] = left[obs_key].astype(str)
+    adata.obs = left.merge(md_df, left_on=obs_key, right_index=True, how="left", sort=False)
+    adata.obs.index = adata.obs_names
 
     adata.uns.setdefault("standardize", {})
     adata.uns["standardize"]["metadata_join"] = {"column": join_column, "obs_key": obs_key or "obs_names"}
