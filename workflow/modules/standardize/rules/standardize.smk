@@ -4,7 +4,23 @@ from pathlib import Path
 
 import yaml
 
-sys.path.insert(0, str((Path(workflow.basedir) / "scripts").resolve()))
+# Resolve scripts dir with multiple candidates because Snakemake can evaluate
+# included files with different base-path semantics depending on invocation.
+_candidate_scripts_dirs = [
+    # Included from repo root Snakefile.
+    Path(workflow.basedir) / "workflow" / "modules" / "standardize" / "scripts",
+    # Running module Snakefile directly (workflow.basedir == module dir).
+    Path(workflow.basedir) / "scripts",
+    # Fallback from current working directory.
+    Path(os.getcwd()) / "workflow" / "modules" / "standardize" / "scripts",
+]
+_SCRIPTS_DIR = next((p.resolve() for p in _candidate_scripts_dirs if p.exists()), None)
+if _SCRIPTS_DIR is None:
+    raise WorkflowError(
+        "Could not locate standardize scripts directory for cleaner imports. Tried: "
+        + ", ".join(str(p.resolve()) for p in _candidate_scripts_dirs)
+    )
+sys.path.insert(0, str(_SCRIPTS_DIR))
 from cleaner_registry import CLEANER_REGISTRY, normalize_cleaner_name
 
 

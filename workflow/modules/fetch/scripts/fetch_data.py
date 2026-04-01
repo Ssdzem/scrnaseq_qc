@@ -249,9 +249,18 @@ def _best_level_for_url(url: str, row: Dict[str, str]) -> str:
     """
 
     url_lc = url.lower()
+
+    def _token_present(token: str) -> bool:
+        token_lc = token.lower()
+        # Match token as a standalone chunk bounded by non-alphanumeric chars.
+        # This avoids false positives like donor_id="3" matching inside
+        # ".../GSE202379/...".
+        pattern = rf"(?<![a-z0-9]){re.escape(token_lc)}(?![a-z0-9])"
+        return re.search(pattern, url_lc) is not None
+
     for level in ("run_id", "sample_id", "donor_id", "study_accession"):
         token = (row.get(level) or "").strip()
-        if token and not _is_missing(token) and token.lower() in url_lc:
+        if token and not _is_missing(token) and _token_present(token):
             return level
     return "unknown"
 
