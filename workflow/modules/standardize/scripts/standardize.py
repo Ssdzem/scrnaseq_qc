@@ -113,18 +113,28 @@ def _run_pipeline(*, study: str, study_spec: dict, output_h5ad: Path, log) -> No
             }
             metadata_already_joined = True
         elif cleaner == "tenx_h5_multi":
-            source_h5ad = prev_h5ad if prev_h5ad is not None else inp.get("h5ad")
-            if not source_h5ad:
-                raise SystemExit(
-                    "Pipeline step 'tenx_h5_multi' requires a previous h5ad output or input.h5ad in spec."
-                )
-            local_spec = {
-                "input": {
-                    "samples": [{"sample_id": sample_id, "h5ad": str(source_h5ad)}],
-                    "metadata": None if metadata_already_joined else inp.get("metadata"),
-                    "qc": inp.get("qc"),
+            if prev_h5ad is None and inp.get("samples"):
+                # Allow direct tenx_h5_multi specs that define input.samples (e.g. single-step pipelines).
+                local_spec = {
+                    "input": {
+                        "samples": inp.get("samples"),
+                        "metadata": None if metadata_already_joined else inp.get("metadata"),
+                        "qc": inp.get("qc"),
+                    }
                 }
-            }
+            else:
+                source_h5ad = prev_h5ad if prev_h5ad is not None else inp.get("h5ad")
+                if not source_h5ad:
+                    raise SystemExit(
+                        "Pipeline step 'tenx_h5_multi' requires input.samples or a previous h5ad output (or input.h5ad)."
+                    )
+                local_spec = {
+                    "input": {
+                        "samples": [{"sample_id": sample_id, "h5ad": str(source_h5ad)}],
+                        "metadata": None if metadata_already_joined else inp.get("metadata"),
+                        "qc": inp.get("qc"),
+                    }
+                }
         else:
             local_spec = study_spec
 
