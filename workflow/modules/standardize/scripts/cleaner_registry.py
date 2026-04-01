@@ -36,11 +36,11 @@ CLEANER_REGISTRY: dict[str, CleanerSpec] = {
         output_type="h5ad",
         path_keys=("input.rds",),
     ),
-    "gse202379_raw_counts": CleanerSpec(
+    "csv_handler": CleanerSpec(
         env="py",
-        input_type="raw_counts_dir",
+        input_type="raw_counts_csv_dir",
         output_type="h5ad",
-        path_keys=("input.raw_dir", "input.metadata"),
+        path_keys=("input.raw_dir",),
     ),
     "hra007511_count_matrix_runs": CleanerSpec(
         env="py",
