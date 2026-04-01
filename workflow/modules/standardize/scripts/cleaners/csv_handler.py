@@ -11,8 +11,6 @@ import pandas as pd
 from scipy import sparse
 from rtlog import log_kv, log_line
 
-from cleaners.tenx_h5_multi import run_tenx_h5_multi
-
 RAW_COUNTS_RE = re.compile(r"^(?P<gsm>GSM\d+)_(?P<label>.+)-raw_counts\.csv(?:\.gz)?$")
 
 
@@ -108,7 +106,6 @@ def _csv_to_adata(*, csv_path: Path, sample_id: str, log: TextIO) -> ad.AnnData:
 def _write_10x_h5_from_adata(*, adata: ad.AnnData, out_h5: Path, sample_id: str, log: TextIO) -> None:
     out_h5.parent.mkdir(parents=True, exist_ok=True)
 
-    # 10x expects genes x cells, CSC compressed.
     matrix = sparse.csc_matrix(adata.X.T)
     if matrix.nnz and not np.issubdtype(matrix.data.dtype, np.integer):
         matrix.data = np.rint(matrix.data).astype(np.int64, copy=False)
@@ -140,8 +137,8 @@ def _write_10x_h5_from_adata(*, adata: ad.AnnData, out_h5: Path, sample_id: str,
     log_line(log, f"[{sample_id}] Wrote intermediate 10x h5: {out_h5}")
 
 
-def run_gse202379_raw_counts(*, study: str, study_spec: dict, output_h5ad: Path, log: TextIO) -> None:
-    inp = study_spec.get("input", {})
+def run_csv_handler(*, study: str, study_spec: dict, output_h5ad: Path, log: TextIO) -> None:
+    inp = study_spec.setdefault("input", {})
     raw_dir = _require_path(inp.get("raw_dir"), "raw_dir")
     tmp_h5_dir = output_h5ad.parent / ".tmp" / f"{study}_raw_count_h5"
     tmp_h5_dir.mkdir(parents=True, exist_ok=True)
@@ -152,7 +149,7 @@ def run_gse202379_raw_counts(*, study: str, study_spec: dict, output_h5ad: Path,
             f"No files matched '*-raw_counts.csv(.gz)' pattern under {raw_dir}"
         )
 
-    log_kv(log, "gse202379_raw_counts.start", study=study, raw_dir=raw_dir, samples=len(run_files))
+    log_kv(log, "csv_handler.start", study=study, raw_dir=raw_dir, samples=len(run_files))
 
     sample_entries: list[dict[str, str]] = []
     for sample_id, csv_path in run_files:
@@ -161,18 +158,13 @@ def run_gse202379_raw_counts(*, study: str, study_spec: dict, output_h5ad: Path,
         _write_10x_h5_from_adata(adata=adata, out_h5=sample_h5, sample_id=sample_id, log=log)
         sample_entries.append({"sample_id": sample_id, "h5": str(sample_h5)})
 
-    qc_cfg = inp.get("qc")
-    if not qc_cfg:
-        qc_cfg = {
-            "method": "mad",
-            "k": 3.0,
-            "mito_upper_k": 5.0,
-            "mito_gene_prefix": "MT-",
-            "miqc_posterior_cutoff": 0.75,
-            "doublet_score_threshold": 0.25,
-        }
-        log_line(log, f"[{study}] input.qc missing; applying default MAD QC config: {qc_cfg}")
+    inp["samples"] = sample_entries
 
-    delegated_spec = {"input": {"samples": sample_entries, "qc": qc_cfg, "metadata": inp.get("metadata")}}
-    run_tenx_h5_multi(study=study, study_spec=delegated_spec, output_h5ad=output_h5ad, log=log)
-    log_kv(log, "gse202379_raw_counts.complete", study=study, output=output_h5ad)
+    placeholder = ad.AnnData(
+        X=sparse.csr_matrix((0, 0), dtype=np.float32),
+        obs=pd.DataFrame(index=pd.Index([], name="barcode")),
+        var=pd.DataFrame(index=pd.Index([], name="gene_symbol")),
+    )
+    placeholder.uns["standardize"] = {"study": study, "process": "csv_handler"}
+    placeholder.write_h5ad(output_h5ad)
+    log_kv(log, "csv_handler.complete", study=study, output=output_h5ad, prepared_samples=len(sample_entries))

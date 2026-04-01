@@ -1,7 +1,12 @@
 import os
+import sys
 from pathlib import Path
 
 import yaml
+
+sys.path.insert(0, str((Path(workflow.basedir) / "scripts").resolve()))
+from cleaner_registry import CLEANER_REGISTRY, normalize_cleaner_name
+
 
 def _spec_path_for_study(study: str) -> Path:
     return Path("config") / "standardize" / f"{study}.yaml"
@@ -19,35 +24,84 @@ def _study_out_h5ad(study: str) -> str:
     return f"out/{study}/raw.h5ad"
 
 
+def _load_spec(study: str) -> dict:
+    spec_path = _spec_path_for_study(study)
+    return yaml.safe_load(open(spec_path, "r", encoding="utf-8")) or {}
+
+
+def _pipeline_cleaners(study: str) -> list[str]:
+    spec = _load_spec(study)
+    pipeline = spec.get("pipeline")
+    if pipeline is None:
+        pipeline = spec.get("Pipeline")
+    if pipeline is None:
+        raise WorkflowError(f"Missing required 'pipeline' in spec for study {study}")
+
+    if isinstance(pipeline, list):
+        cleaners = [normalize_cleaner_name(v) for v in pipeline if str(v).strip()]
+    elif isinstance(pipeline, dict):
+        cleaners = [normalize_cleaner_name(v) for _k, v in pipeline.items() if str(v).strip()]
+    else:
+        raise WorkflowError(f"Invalid pipeline format in spec for study {study}")
+
+    unknown = [c for c in cleaners if c not in CLEANER_REGISTRY]
+    if unknown:
+        raise WorkflowError(f"Unknown cleaners in pipeline for {study}: {unknown}")
+    return cleaners
+
+
+def _required_spec_input_paths(study: str) -> list[str]:
+    spec = _load_spec(study)
+    inp = spec.get("input") or {}
+
+    paths: set[str] = set()
+    for cleaner in _pipeline_cleaners(study):
+        reg = CLEANER_REGISTRY[cleaner]
+        for key in reg.path_keys:
+            if key.endswith("[]"):
+                continue
+            if key == "input.samples[].h5":
+                for sample in inp.get("samples", []) if isinstance(inp, dict) else []:
+                    if isinstance(sample, dict):
+                        h5 = sample.get("h5")
+                        if isinstance(h5, str) and h5.strip():
+                            paths.add(h5)
+                continue
+            if key == "input.samples[].h5ad":
+                for sample in inp.get("samples", []) if isinstance(inp, dict) else []:
+                    if isinstance(sample, dict):
+                        h5ad = sample.get("h5ad")
+                        if isinstance(h5ad, str) and h5ad.strip() and not h5ad.startswith("in-memory://"):
+                            paths.add(h5ad)
+                continue
+
+            cur = spec
+            for part in key.split("."):
+                if part == "input":
+                    cur = inp
+                elif isinstance(cur, dict):
+                    cur = cur.get(part)
+                else:
+                    cur = None
+                    break
+            if isinstance(cur, str) and cur.strip() and not cur.startswith("in-memory://"):
+                paths.add(cur)
+
+    return sorted(paths)
+
+
+def _pipeline_env(study: str) -> str:
+    cleaners = _pipeline_cleaners(study)
+    needs_r = any(CLEANER_REGISTRY[c].env == "r" for c in cleaners)
+    return "../env/standardize_r.yaml" if needs_r else "../env/standardize_py.yaml"
+
+
 STUDIES = _studies_to_process()
 
 
 rule standardize_all:
     input:
         expand("{h5ad}", h5ad=[_study_out_h5ad(s) for s in STUDIES])
-
-
-def _required_spec_input_paths(study: str) -> list[str]:
-    spec_path = _spec_path_for_study(study)
-    spec = yaml.safe_load(open(spec_path, "r", encoding="utf-8")) or {}
-    inp = spec.get("input") or {}
-
-    paths: list[str] = []
-
-    # Flat key/value paths (e.g., seurat_rds / count_matrix_10x specs).
-    for v in inp.values():
-        if isinstance(v, str):
-            paths.append(v)
-
-    # Nested sample list paths (e.g., tenx_h5_multi specs).
-    for sample in inp.get("samples", []) if isinstance(inp, dict) else []:
-        if isinstance(sample, dict):
-            h5 = sample.get("h5")
-            if isinstance(h5, str):
-                paths.append(h5)
-
-    # Keep deterministic ordering and remove duplicates.
-    return sorted(set(paths))
 
 
 rule standardize_unpack_study:
@@ -99,9 +153,7 @@ rule standardize_study:
     log:
         "out/logs/standardize/{study}.log"
     conda:
-        lambda wc: "../env/standardize_r.yaml"
-        if (yaml.safe_load(open(_spec_path_for_study(wc.study))).get("process") == "seurat_rds")
-        else "../env/standardize_py.yaml"
+        lambda wc: _pipeline_env(wc.study)
     shell:
         r"""
         mkdir -p $(dirname {log})
