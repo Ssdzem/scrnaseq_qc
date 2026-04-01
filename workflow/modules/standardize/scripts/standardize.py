@@ -64,10 +64,10 @@ def _run_cleaner(
         from cleaners.seurat_rds import run_seurat_rds
 
         run_seurat_rds(study=study, study_spec=study_spec, output_h5ad=output_h5ad, log=log)
-    elif cleaner == "gse202379_raw_counts":
-        from cleaners.gse202379_raw_counts import run_gse202379_raw_counts
+    elif cleaner == "csv_handler":
+        from cleaners.csv_handler import run_csv_handler
 
-        run_gse202379_raw_counts(study=study, study_spec=study_spec, output_h5ad=output_h5ad, log=log)
+        run_csv_handler(study=study, study_spec=study_spec, output_h5ad=output_h5ad, log=log)
     elif cleaner == "hra007511_count_matrix_runs":
         from cleaners.hra007511_count_matrix_runs import run_hra007511_count_matrix_runs
 
@@ -83,7 +83,7 @@ def _run_cleaner(
 
 def _run_pipeline(*, study: str, study_spec: dict, output_h5ad: Path, log) -> None:
     cleaners = _pipeline_cleaners(study_spec)
-    inp = dict(study_spec.get("input") or {})
+    inp = study_spec.setdefault("input", {})
     sample_id = str(inp.get("sample_id", study)).strip() or study
 
     prev_h5ad: Path | None = None
