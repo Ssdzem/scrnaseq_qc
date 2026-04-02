@@ -4,6 +4,7 @@ from pathlib import Path
 
 import numpy as np
 import scanpy as sc
+import scanpy.external as sce
 import yaml
 
 
@@ -133,16 +134,25 @@ def run_integration(adata, cfg: dict, do_integration: bool = True):
         scvi.settings.seed = seed
         scvi.model.SCVI.setup_anndata(adata_hvg, layer="counts", batch_key=scvi_batch_key)
         model = scvi.model.SCVI(adata_hvg)
-        model.train(max_epochs=max_epochs)
+        model.train(
+          max_epochs=400,
+          validation_size=0.1,
+          check_val_every_n_epoch=1,
+          early_stopping=True,
+          early_stopping_monitor="elbo_validation",
+          early_stopping_patience=20,
+        )        
         adata_hvg.obsm["X_scVI"] = model.get_latent_representation()
         integrated_rep = "X_scVI"
         logging.info("Trained scVI and saved latent representation")
     elif do_integration and integration_method == "harmony":
-        import harmonypy as hm
-
-        harmony_out = hm.run_harmony(adata_hvg.obsm["X_pca"], adata_hvg.obs, scvi_batch_key)
-        adata_hvg.obsm["X_harmony"] = harmony_out.Z_corr.T
-        adata_hvg.obsm["X_scVI"] = adata_hvg.obsm["X_harmony"]
+        import scanpy.external as sce
+        sce.pp.harmony_integrate(
+        adata_hvg,
+        key=scvi_batch_key,
+        basis="X_pca",
+        adjusted_basis="X_harmony",
+        )
         integrated_rep = "X_harmony"
         logging.info("Ran Harmony integration and saved X_harmony embedding")
     elif do_integration:
