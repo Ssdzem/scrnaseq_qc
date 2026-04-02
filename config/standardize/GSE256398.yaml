@@ -62,10 +62,6 @@ input:
       h5: "out/GSE256398/raw/GSM8097095_S36_CB_raw_feature_bc_matrix_filtered.h5"
     - sample_id: "GSM8097096"
       h5: "out/GSE256398/raw/GSM8097096_S38_CB_raw_feature_bc_matrix_filtered.h5"
-    - sample_id: "GSM8648657"
-      h5: "out/GSE256398/raw/GSM8648657_R3_CB_raw_feature_bc_matrix_filtered.h5"
-    - sample_id: "GSM8648658"
-      h5: "out/GSE256398/raw/GSM8648658_R5_CB_raw_feature_bc_matrix_filtered.h5"
 
 pipeline:
   cleaner1: "tenx_h5_multi.py"
