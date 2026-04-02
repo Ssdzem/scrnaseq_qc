@@ -28,9 +28,7 @@ def _parse_sample_id_from_name(filename: str) -> str | None:
     if not match:
         return None
     gsm = match.group("gsm")
-    label = match.group("label")
-    run_id = label.split("-", 1)[1] if "-" in label else label
-    return f"{gsm}_{run_id}"
+    return gsm
 
 
 def _pick_raw_count_files(raw_dir: Path) -> list[tuple[str, Path]]:
