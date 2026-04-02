@@ -282,6 +282,41 @@ def _finalize_tenx_multi(
     log_kv(log, "tenx_h5_multi.complete", study=study, output=output_h5ad)
 
 
+def _is_missing_like(value) -> bool:
+    if pd.isna(value):
+        return True
+    if isinstance(value, str):
+        return not value.strip()
+    return False
+
+
+def _fill_obs_column_if_missing(
+    *,
+    adata: ad.AnnData,
+    column: str,
+    fill_value: str,
+    study: str,
+    log: TextIO,
+) -> None:
+    fill_value = str(fill_value)
+    if column not in adata.obs.columns:
+        adata.obs[column] = fill_value
+        log_line(log, f"[{study}] Filled missing obs column '{column}' with fallback value '{fill_value}'")
+        return
+
+    col = adata.obs[column]
+    mask = col.map(_is_missing_like)
+    missing_count = int(mask.sum())
+    if missing_count == 0:
+        log_line(log, f"[{study}] Preserved existing obs column '{column}' (no missing values)")
+        return
+
+    col = col.astype(object)
+    col.loc[mask] = fill_value
+    adata.obs[column] = col
+    log_line(log, f"[{study}] Preserved '{column}' and filled {missing_count} missing values with '{fill_value}'")
+
+
 def run_tenx_h5_multi(*, study: str, study_spec: dict, output_h5ad: Path, log: TextIO) -> None:
     inp = study_spec.get("input", {})
     samples = _require_list(inp.get("samples"), "input.samples")
@@ -344,8 +379,8 @@ def run_tenx_adata_multi(
     for sample_id, a in sample_adatas:
         sample_id = str(sample_id)
         a.var_names_make_unique()
-        a.obs["sample_id"] = sample_id
-        a.obs["study_accession"] = study
+        _fill_obs_column_if_missing(adata=a, column="sample_id", fill_value=sample_id, study=study, log=log)
+        _fill_obs_column_if_missing(adata=a, column="study_accession", fill_value=study, study=study, log=log)
         log_line(log, f"[{study}] Loaded {sample_id}: n_obs={a.n_obs} n_vars={a.n_vars}")
 
         if qc_cfg is not None:
@@ -356,4 +391,3 @@ def run_tenx_adata_multi(
         adatas.append(a)
 
     _finalize_tenx_multi(study=study, inp=inp, adatas=adatas, output_h5ad=output_h5ad, log=log)
-
