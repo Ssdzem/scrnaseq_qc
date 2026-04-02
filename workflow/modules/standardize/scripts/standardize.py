@@ -88,6 +88,7 @@ def _run_pipeline(*, study: str, study_spec: dict, output_h5ad: Path, log) -> No
 
     prev_h5ad: Path | None = None
     metadata_already_joined = False
+    prev_cleaner: str | None = None
     for idx, cleaner in enumerate(cleaners):
         is_last = idx == len(cleaners) - 1
         out_path = output_h5ad if is_last else output_h5ad.parent / ".tmp" / f"{study}.pipeline.{idx + 1}.{cleaner}.h5ad"
@@ -113,8 +114,14 @@ def _run_pipeline(*, study: str, study_spec: dict, output_h5ad: Path, log) -> No
             }
             metadata_already_joined = True
         elif cleaner == "tenx_h5_multi":
-            if prev_h5ad is None and inp.get("samples"):
-                # Allow direct tenx_h5_multi specs that define input.samples (e.g. single-step pipelines).
+            use_explicit_samples = bool(inp.get("samples")) and (
+                prev_h5ad is None or prev_cleaner == "csv_handler"
+            )
+            if use_explicit_samples:
+                # Use explicit input.samples for:
+                #   1) single-step tenx_h5_multi specs, or
+                #   2) csv_handler -> tenx_h5_multi pipelines, where csv_handler writes
+                #      a placeholder h5ad and prepares real sample inputs.
                 local_spec = {
                     "input": {
                         "samples": inp.get("samples"),
@@ -147,6 +154,7 @@ def _run_pipeline(*, study: str, study_spec: dict, output_h5ad: Path, log) -> No
         )
 
         prev_h5ad = out_path
+        prev_cleaner = cleaner
         log_kv(log, "pipeline.cleaner.complete", study=study, cleaner=cleaner, step=idx + 1, output=out_path)
 
 
