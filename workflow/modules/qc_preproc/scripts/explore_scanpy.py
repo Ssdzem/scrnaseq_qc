@@ -4,7 +4,6 @@ from pathlib import Path
 
 import numpy as np
 import scanpy as sc
-import scanpy.external as sce
 import yaml
 
 
@@ -146,15 +145,36 @@ def run_integration(adata, cfg: dict, do_integration: bool = True):
         integrated_rep = "X_scVI"
         logging.info("Trained scVI and saved latent representation")
     elif do_integration and integration_method == "harmony":
-        import scanpy.external as sce
-        sce.pp.harmony_integrate(
-        adata_hvg,
-        key=scvi_batch_key,
-        basis="X_pca",
-        adjusted_basis="X_harmony",
+        import harmonypy as hm
+
+        ho = hm.run_harmony(
+            adata_hvg.obsm["X_pca"],
+            adata_hvg.obs,
+            [scvi_batch_key],
         )
+        z_corr = ho.Z_corr
+        if hasattr(z_corr, "detach"):
+            z_corr = z_corr.detach().cpu().numpy()
+        z_corr = np.asarray(z_corr)
+
+        if z_corr.ndim != 2:
+            raise ValueError(
+                f"Harmony returned unexpected ndim={z_corr.ndim} with shape={z_corr.shape}."
+            )
+
+        if z_corr.shape == (adata_hvg.n_obs, n_pcs):
+            pass
+        elif z_corr.shape == (n_pcs, adata_hvg.n_obs):
+            z_corr = z_corr.T
+        else:
+            raise ValueError(
+                "Harmony returned unexpected shape="
+                f"{z_corr.shape}; expected {(adata_hvg.n_obs, n_pcs)} or {(n_pcs, adata_hvg.n_obs)}."
+            )
+
+        adata_hvg.obsm["X_harmony"] = z_corr
         integrated_rep = "X_harmony"
-        logging.info("Ran Harmony integration and saved X_harmony embedding")
+        logging.info("Ran Harmony integration and saved X_harmony embedding with shape=%s", z_corr.shape)
     elif do_integration:
         raise ValueError(f"Unsupported integration_method={integration_method!r}; expected 'scvi' or 'harmony'.")
     else:
