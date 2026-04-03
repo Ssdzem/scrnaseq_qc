@@ -141,9 +141,11 @@ def run_integration(adata, cfg: dict, do_integration: bool = True):
           early_stopping_monitor="elbo_validation",
           early_stopping_patience=20,
         )        
-        adata_hvg.obsm["X_scVI"] = model.get_latent_representation()
-        integrated_rep = "X_scVI"
-        logging.info("Trained scVI and saved latent representation")
+        adata_hvg.obsm["X_integrated"] = model.get_latent_representation()
+        adata_hvg.obsm["X_scVI"] = adata_hvg.obsm["X_integrated"]
+        integrated_rep = "X_integrated"
+        cluster_key = "leiden_scvi"
+        logging.info("Trained scVI and saved X_integrated/X_scVI latent representation")
     elif do_integration and integration_method == "harmony":
         import harmonypy as hm
 
@@ -172,20 +174,23 @@ def run_integration(adata, cfg: dict, do_integration: bool = True):
                 f"{z_corr.shape}; expected {(adata_hvg.n_obs, n_pcs)} or {(n_pcs, adata_hvg.n_obs)}."
             )
 
-        adata_hvg.obsm["X_harmony"] = z_corr
-        integrated_rep = "X_harmony"
-        logging.info("Ran Harmony integration and saved X_harmony embedding with shape=%s", z_corr.shape)
+        adata_hvg.obsm["X_integrated"] = z_corr
+        adata_hvg.obsm["X_harmony"] = adata_hvg.obsm["X_integrated"]
+        integrated_rep = "X_integrated"
+        cluster_key = "leiden_harmony"
+        logging.info("Ran Harmony integration and saved X_integrated/X_harmony embedding with shape=%s", z_corr.shape)
     elif do_integration:
         raise ValueError(f"Unsupported integration_method={integration_method!r}; expected 'scvi' or 'harmony'.")
     else:
         integrated_rep = "X_pca"
-        adata_hvg.obsm["X_scVI"] = adata_hvg.obsm["X_pca"]
+        cluster_key = "leiden_pca"
+        adata_hvg.obsm["X_integrated"] = adata_hvg.obsm["X_pca"]
         integration_method = "none"
-        logging.info("Skipping integration backend; using PCA representation directly")
+        logging.info("Skipping integration backend; using PCA representation directly as X_integrated")
 
     sc.pp.neighbors(adata_hvg, use_rep=integrated_rep, n_neighbors=n_neighbors)
     sc.tl.umap(adata_hvg)
-    sc.tl.leiden(adata_hvg, key_added="leiden_scvi", resolution=leiden_resolution)
+    sc.tl.leiden(adata_hvg, key_added=cluster_key, resolution=leiden_resolution)
     logging.info("Computed neighbors, UMAP, and Leiden clusters")
 
     adata.uns.setdefault("qc_preproc", {})
@@ -201,11 +206,14 @@ def run_integration(adata, cfg: dict, do_integration: bool = True):
 
     adata.uns["qc_preproc"]["hvg_var_names"] = adata_hvg.var_names.tolist()
     adata.obsm["X_pca"] = adata_hvg.obsm["X_pca"]
-    adata.obsm["X_scVI"] = adata_hvg.obsm["X_scVI"]
+    adata.obsm["X_integrated"] = adata_hvg.obsm["X_integrated"]
+    if "X_scVI" in adata_hvg.obsm:
+        adata.obsm["X_scVI"] = adata_hvg.obsm["X_scVI"]
     if "X_harmony" in adata_hvg.obsm:
         adata.obsm["X_harmony"] = adata_hvg.obsm["X_harmony"]
     adata.obsm["X_umap"] = adata_hvg.obsm["X_umap"]
-    adata.obs["leiden_scvi"] = adata_hvg.obs["leiden_scvi"].astype(str).reindex(adata.obs_names)
+    adata.obs["leiden"] = adata_hvg.obs[cluster_key].astype(str).reindex(adata.obs_names)
+    adata.obs[cluster_key] = adata.obs["leiden"]
     logging.info("Transferred embeddings and clusters back to full AnnData")
 
     return adata
