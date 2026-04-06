@@ -242,24 +242,14 @@ rule fetch_run:
 # else (e.g. absolute path). This keeps CLI usage intuitive.
 rule fetch_done_data:
     input:
-        metadata=METADATA_CSV,
-        script=os.path.join(MODULE_DIR, "scripts", "fetch_data.py"),
+        lambda wc: [
+            f"out/{wc.study}/fastqs/{donor_id}/{sample_id}/{run_id}/.fetch_done"
+            for donor_id, sample_id, run_id in sorted(TRIPLES_BY_STUDY_FASTQS.get(wc.study, set()))
+        ]
     output:
         touch("out/{study,[^/]+}/.fetch_done"),
-    params:
-        out_root="out",
-        extra_args=lambda wc: _fetch_extra_args(),
-    log:
-        "out/logs/fetch/fetch_done/{study}.log",
-    conda:
-        os.path.join(MODULE_DIR, "env", "fetch.yaml")
     shell:
-        r"""
-        mkdir -p $(dirname {log})
-        set -o pipefail
-        python {input.script} --metadata {input.metadata} --out-root {params.out_root} download-study {wildcards.study} {params.extra_args} \
-          2>&1 | tee -a {log}
-        """
+        "true"
 
 
 
