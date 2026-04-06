@@ -8,6 +8,7 @@ include: "workflow/modules/fetch/Snakefile"
 include: "workflow/modules/fastq_prepros/Snakefile"
 include: "workflow/modules/standardize/Snakefile"
 include: "workflow/modules/qc_preproc/Snakefile"
+include: "workflow/modules/integration_annotation/Snakefile"
 
 
 def _study_from_config() -> str:
@@ -36,3 +37,8 @@ rule all:
 rule qc_preintegration_study:
     input:
         lambda wc: f"out/{_study_from_config()}/qc/.study_explore_done"
+
+
+rule integration_annotation_study_from_config:
+    input:
+        lambda wc: f"out/integration_annotation/{_study_from_config()}/.integration_annotation_done"

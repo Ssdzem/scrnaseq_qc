@@ -1,0 +1,13 @@
+name: integration_annotation_py
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python=3.10
+  - scanpy
+  - anndata
+  - pandas
+  - numpy
+  - pyyaml
+  - scvi-tools
+  - harmonypy

@@ -1,0 +1,11 @@
+# Snakefile for integration_annotation module (keep minimal; include rules).
+
+configfile: "config/integration_annotation.yaml"
+
+include: "rules/common.smk"
+include: "rules/integrate.smk"
+include: "rules/annotate.smk"
+include: "rules/evaluate.smk"
+include: "rules/finalize.smk"
+
+ruleorder: integration_annotation_all > ia_evaluate_all > ia_annotate_all > ia_integrate_all > integration_annotation_study > ia_evaluate_study > ia_annotate_study > ia_integrate_study
