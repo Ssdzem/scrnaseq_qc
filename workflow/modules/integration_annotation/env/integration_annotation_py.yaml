@@ -11,3 +11,6 @@ dependencies:
   - pyyaml
   - scvi-tools
   - harmonypy
+  - pip
+  - pip:
+      - symphonypy

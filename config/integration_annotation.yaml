@@ -14,11 +14,33 @@ integration:
   seed: 0
 
 annotation:
-  # Strategy options: "from_existing_column", "from_leiden", or fallback to Unknown.
+  # Strategy options: "from_existing_column", "from_leiden", "symphony", "scanvi", or fallback to Unknown.
   method: "from_existing_column"
   source_column: "cell_type"
   target_column: "cell_type"
   unknown_label: "Unknown"
+  symphony:
+    # Reference atlas with precomputed PCA/harmony context suitable for Symphony mapping.
+    reference_h5ad: ""
+    # Label column in reference atlas to transfer to query cells.
+    reference_label_key: "cell_type"
+    # Optional batch columns.
+    reference_batch_key: "sample_id"
+    query_batch_key: "sample_id"
+    # k in kNN label transfer.
+    k: 5
+  scanvi:
+    # Reference atlas containing known labels for semi-supervised transfer.
+    reference_h5ad: ""
+    reference_label_key: "cell_type"
+    # Batch key and optional counts layer used for SCVI/SCANVI setup.
+    batch_key: "sample_id"
+    counts_layer: "counts"
+    # Training settings.
+    scvi_max_epochs: 100
+    scanvi_max_epochs: 30
+    n_latent: 30
+    seed: 0
 
 evaluation:
   # Keys used by the lightweight evaluator.
