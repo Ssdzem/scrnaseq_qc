@@ -98,9 +98,9 @@ snakemake --profile profiles/local -s workflow/modules/standardize/Snakefile out
 
 ## Conda environment selection
 
-`standardize_study` chooses env by `process` in the study YAML:
+`standardize_study` chooses env by cleaners listed in `pipeline`:
 
-- `process: seurat_rds` -> `workflow/modules/standardize/env/standardize_r.yaml`
+- if any cleaner is `env="r"` in the cleaner registry -> `workflow/modules/standardize/env/standardize_r.yaml`
 - otherwise -> `workflow/modules/standardize/env/standardize_py.yaml`
 
 ## Notes
