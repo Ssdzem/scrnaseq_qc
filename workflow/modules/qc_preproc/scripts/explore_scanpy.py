@@ -101,127 +101,9 @@ def prepare_before_integration(adata, study: str, cfg: dict):
     return adata
 
 
-def run_integration(adata, cfg: dict, do_integration: bool = True):
-    integration_method = str(cfg.get("integration_method", "scvi")).strip().lower()
-    n_pcs = int(cfg.get("n_pcs", 50))
-    n_neighbors = int(cfg.get("n_neighbors", 15))
-    leiden_resolution = float(cfg.get("leiden_resolution", 1.0))
-    max_epochs = int(cfg.get("scvi_max_epochs", 100))
-    seed = int(cfg.get("seed", 0))
-    np.random.seed(seed)
-
-    pre_cfg = adata.uns.get("qc_preproc", {}).get("pre_integration_config", {})
-    scvi_batch_key = str(pre_cfg.get("scvi_batch_key", cfg.get("scvi_batch_key", "sample_id")))
-    hvg_var_names = list(adata.uns.get("qc_preproc", {}).get("hvg_var_names", []))
-    if not hvg_var_names:
-        raise ValueError("Missing qc_preproc.hvg_var_names; run pre-integration mode first.")
-
-    adata_hvg = adata[:, hvg_var_names].copy()
-    adata_hvg.layers["log1p"] = adata_hvg.X.copy()
-    logging.info("Created HVG subset for integration: n_cells=%d n_hvg=%d", adata_hvg.n_obs, adata_hvg.n_vars)
-
-    sc.pp.scale(adata_hvg, max_value=10)
-    adata_hvg.layers["scaled"] = adata_hvg.X.copy()
-    logging.info("Scaled HVG data")
-
-    sc.tl.pca(adata_hvg, n_comps=n_pcs, svd_solver="arpack")
-    logging.info("Computed PCA")
-
-    if do_integration and integration_method == "scvi":
-        import scvi
-
-        scvi.settings.seed = seed
-        scvi.model.SCVI.setup_anndata(adata_hvg, layer="counts", batch_key=scvi_batch_key)
-        model = scvi.model.SCVI(adata_hvg)
-        model.train(
-          max_epochs=400,
-          validation_size=0.1,
-          check_val_every_n_epoch=1,
-          early_stopping=True,
-          early_stopping_monitor="elbo_validation",
-          early_stopping_patience=20,
-        )        
-        adata_hvg.obsm["X_integrated"] = model.get_latent_representation()
-        adata_hvg.obsm["X_scVI"] = adata_hvg.obsm["X_integrated"]
-        integrated_rep = "X_integrated"
-        cluster_key = "leiden_scvi"
-        logging.info("Trained scVI and saved X_integrated/X_scVI latent representation")
-    elif do_integration and integration_method == "harmony":
-        import harmonypy as hm
-
-        ho = hm.run_harmony(
-            adata_hvg.obsm["X_pca"],
-            adata_hvg.obs,
-            [scvi_batch_key],
-        )
-        z_corr = ho.Z_corr
-        if hasattr(z_corr, "detach"):
-            z_corr = z_corr.detach().cpu().numpy()
-        z_corr = np.asarray(z_corr)
-
-        if z_corr.ndim != 2:
-            raise ValueError(
-                f"Harmony returned unexpected ndim={z_corr.ndim} with shape={z_corr.shape}."
-            )
-
-        if z_corr.shape == (adata_hvg.n_obs, n_pcs):
-            pass
-        elif z_corr.shape == (n_pcs, adata_hvg.n_obs):
-            z_corr = z_corr.T
-        else:
-            raise ValueError(
-                "Harmony returned unexpected shape="
-                f"{z_corr.shape}; expected {(adata_hvg.n_obs, n_pcs)} or {(n_pcs, adata_hvg.n_obs)}."
-            )
-
-        adata_hvg.obsm["X_integrated"] = z_corr
-        adata_hvg.obsm["X_harmony"] = adata_hvg.obsm["X_integrated"]
-        integrated_rep = "X_integrated"
-        cluster_key = "leiden_harmony"
-        logging.info("Ran Harmony integration and saved X_integrated/X_harmony embedding with shape=%s", z_corr.shape)
-    elif do_integration:
-        raise ValueError(f"Unsupported integration_method={integration_method!r}; expected 'scvi' or 'harmony'.")
-    else:
-        integrated_rep = "X_pca"
-        cluster_key = "leiden_pca"
-        adata_hvg.obsm["X_integrated"] = adata_hvg.obsm["X_pca"]
-        integration_method = "none"
-        logging.info("Skipping integration backend; using PCA representation directly as X_integrated")
-
-    sc.pp.neighbors(adata_hvg, use_rep=integrated_rep, n_neighbors=n_neighbors)
-    sc.tl.umap(adata_hvg)
-    sc.tl.leiden(adata_hvg, key_added=cluster_key, resolution=leiden_resolution)
-    logging.info("Computed neighbors, UMAP, and Leiden clusters")
-
-    adata.uns.setdefault("qc_preproc", {})
-    adata.uns["qc_preproc"]["integration_config"] = {
-        "integration_method": integration_method,
-        "integration_batch_key": scvi_batch_key,
-        "n_pcs": n_pcs,
-        "n_neighbors": n_neighbors,
-        "leiden_resolution": leiden_resolution,
-        "scvi_max_epochs": max_epochs,
-        "seed": seed,
-    }
-
-    adata.uns["qc_preproc"]["hvg_var_names"] = adata_hvg.var_names.tolist()
-    adata.obsm["X_pca"] = adata_hvg.obsm["X_pca"]
-    adata.obsm["X_integrated"] = adata_hvg.obsm["X_integrated"]
-    if "X_scVI" in adata_hvg.obsm:
-        adata.obsm["X_scVI"] = adata_hvg.obsm["X_scVI"]
-    if "X_harmony" in adata_hvg.obsm:
-        adata.obsm["X_harmony"] = adata_hvg.obsm["X_harmony"]
-    adata.obsm["X_umap"] = adata_hvg.obsm["X_umap"]
-    adata.obs["leiden"] = adata_hvg.obs[cluster_key].astype(str).reindex(adata.obs_names)
-    adata.obs[cluster_key] = adata.obs["leiden"]
-    logging.info("Transferred embeddings and clusters back to full AnnData")
-
-    return adata
-
-
 def main(argv: list[str] | None = None):
     p = argparse.ArgumentParser()
-    p.add_argument("--mode", choices=["full", "pre", "integration", "no_integration", "noop"], default="full")
+    p.add_argument("--mode", choices=["pre", "noop"], default="pre")
     p.add_argument("--study", required=True)
     p.add_argument("--input", required=True)
     p.add_argument("--qc-config", required=True)
@@ -237,19 +119,13 @@ def main(argv: list[str] | None = None):
     logging.info("Reading h5ad: %s", args.input)
     adata = sc.read_h5ad(args.input)
 
-    if args.mode in {"full", "pre"}:
+    if args.mode == "pre":
         logging.info("Running pre-integration preprocessing for: %s", args.study)
         adata = prepare_before_integration(adata, study=args.study, cfg=cfg)
-    if args.mode in {"full", "integration", "no_integration"}:
-        if args.mode == "no_integration":
-            logging.info("Running downstream embedding/clustering without integration for: %s", args.study)
-        else:
-            logging.info("Running integration step for: %s", args.study)
-        adata = run_integration(adata, cfg=cfg, do_integration=(args.mode != "no_integration"))
-    if args.mode == "noop":
+    else:
         adata.uns.setdefault("qc_preproc", {})
-        adata.uns["qc_preproc"]["study_explore_integration_skipped"] = True
-        logging.info("Skipping integration for this run (mode=noop)")
+        adata.uns["qc_preproc"]["pre_integration_skipped"] = True
+        logging.info("Skipping pre-integration for this run (mode=noop)")
 
     out = Path(args.output)
     out.parent.mkdir(parents=True, exist_ok=True)

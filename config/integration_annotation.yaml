@@ -1,0 +1,27 @@
+integration:
+  # Enable an integration backend. If false, uses PCA for graph/UMAP/Leiden.
+  enabled: true
+  # Integration backend: "scvi" or "harmony".
+  method: "scvi"
+  # Which obs key to use as batch for integration.
+  batch_key: "sample_id"
+  # Embedding / graph parameters.
+  n_pcs: 50
+  n_neighbors: 15
+  leiden_resolution: 1.0
+  # scVI-specific training knobs.
+  scvi_max_epochs: 100
+  seed: 0
+
+annotation:
+  # Strategy options: "from_existing_column", "from_leiden", or fallback to Unknown.
+  method: "from_existing_column"
+  source_column: "cell_type"
+  target_column: "cell_type"
+  unknown_label: "Unknown"
+
+evaluation:
+  # Keys used by the lightweight evaluator.
+  batch_key: "sample_id"
+  label_key: "cell_type"
+  unknown_label: "Unknown"

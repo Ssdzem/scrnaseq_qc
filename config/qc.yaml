@@ -35,25 +35,6 @@ qc:
   # Number of HVGs used for exploratory embeddings.
   hvg_n_top_genes: 3000
 
-  # Number of PCs in PCA.
-  n_pcs: 50
-
-  # kNN neighbors size for graph construction.
-  n_neighbors: 15
-
-  # Resolution for Leiden clustering in integrated space.
-  leiden_resolution: 1.0
-
-  # Max training epochs for scVI.
-  scvi_max_epochs: 100
-
-  # Integration backend for exploratory embeddings: "scvi" or "harmony".
-  integration_method: "scvi"
-
-  # Whether to run scVI integration for per-study explore outputs.
-  # Set false to skip integration for individual studies (useful for single-study runs).
-  study_explore_with_integration: true
-
   # Random seed for reproducibility.
   seed: 0
 
