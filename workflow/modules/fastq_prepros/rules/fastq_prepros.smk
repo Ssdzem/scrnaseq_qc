@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -98,6 +99,51 @@ def _fastq_dir(study: str, donor_id: str, sample_id: str, run_id: str) -> Path:
     return Path(OUT_ROOT) / study / "fastqs" / donor_id / sample_id / run_id
 
 
+def _fastq_key_and_read(path: Path) -> tuple[str, int] | None:
+    """Extract a pairing key and read number from FASTQ path."""
+    name = path.name
+    patterns = [
+        (r"^(?P<key>.+)_f1\.fastq\.gz$", 1),
+        (r"^(?P<key>.+)_r2\.fastq\.gz$", 2),
+        (r"^(?P<key>.+)_R1(?:_[0-9]+)?\.fastq\.gz$", 1),
+        (r"^(?P<key>.+)_R2(?:_[0-9]+)?\.fastq\.gz$", 2),
+        (r"^(?P<key>.+)_1\.fastq\.gz$", 1),
+        (r"^(?P<key>.+)_2\.fastq\.gz$", 2),
+        (r"^(?P<key>.+)_1\.fq\.gz$", 1),
+        (r"^(?P<key>.+)_2\.fq\.gz$", 2),
+    ]
+    for pattern, read in patterns:
+        m = re.match(pattern, name)
+        if m:
+            return m.group("key"), read
+    return None
+
+
+def _discover_paired_fastqs(fq_dir: Path) -> list[str]:
+    """Find paired FASTQs recursively in a run folder.
+
+    Supports files directly under run_id and nested run_id/run_id layouts.
+    """
+    candidates = sorted(fq_dir.rglob("*.fastq.gz")) + sorted(fq_dir.rglob("*.fq.gz"))
+    if not candidates:
+        return []
+
+    pairs: dict[str, dict[int, Path]] = {}
+    for p in sorted(set(candidates)):
+        parsed = _fastq_key_and_read(p)
+        if parsed is None:
+            continue
+        key, read = parsed
+        pairs.setdefault(key, {})[read] = p
+
+    resolved: list[str] = []
+    for key in sorted(pairs):
+        mates = pairs[key]
+        if 1 in mates and 2 in mates:
+            resolved.extend([str(mates[1]), str(mates[2])])
+    return resolved
+
+
 def _targets(df: pd.DataFrame) -> list[dict]:
     records: list[dict] = []
     for study in STUDIES:
@@ -162,11 +208,10 @@ def _input_fastqs(wc):
         if not fq_dir.exists():
             raise WorkflowError(f"FASTQ directory not found: {fq_dir}")
 
-        r1 = sorted(fq_dir.glob("*_f1.fastq.gz")) + sorted(fq_dir.glob("*_R1_*.fastq.gz"))
-        r2 = sorted(fq_dir.glob("*_r2.fastq.gz")) + sorted(fq_dir.glob("*_R2_*.fastq.gz"))
-        if not r1 or not r2:
+        run_fastqs = _discover_paired_fastqs(fq_dir)
+        if not run_fastqs:
             raise WorkflowError(f"Could not find paired FASTQs in: {fq_dir}")
-        fastqs.extend([str(r1[0]), str(r2[0])])
+        fastqs.extend(run_fastqs)
 
     return fastqs
 
