@@ -73,7 +73,14 @@ def run_integration(adata, cfg: dict, scope_label: str):
         layer_for_scvi = "counts" if "counts" in adata_hvg.layers else None
         scvi.model.SCVI.setup_anndata(adata_hvg, layer=layer_for_scvi, batch_key=scvi_batch_key)
         model = scvi.model.SCVI(adata_hvg)
-        model.train(max_epochs=scvi_max_epochs)
+        model.train(
+          max_epochs=400,
+          validation_size=0.1,
+          check_val_every_n_epoch=1,
+          early_stopping=True,
+          early_stopping_monitor="elbo_validation",
+          early_stopping_patience=20,
+        ) 
         adata_hvg.obsm["X_integrated"] = model.get_latent_representation()
         adata_hvg.obsm["X_scVI"] = adata_hvg.obsm["X_integrated"]
         cluster_key = "leiden_scvi"

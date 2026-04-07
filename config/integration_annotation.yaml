@@ -4,13 +4,13 @@ integration:
   # Integration backend: "scvi" or "harmony".
   method: "scvi"
   # Which obs key to use as batch for integration.
-  batch_key: "sample_id"
+  batch_key: "study_accession"
   # Embedding / graph parameters.
   n_pcs: 50
   n_neighbors: 15
   leiden_resolution: 1.0
   # scVI-specific training knobs.
-  scvi_max_epochs: 100
+  scvi_max_epochs: 400
   seed: 0
 
 annotation:
