@@ -2,6 +2,7 @@ import argparse
 import logging
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import scanpy as sc
 import yaml
@@ -57,6 +58,8 @@ def _annotate_with_symphony(adata_query, cfg: dict, target_col: str, unknown_lab
     if query_batch_key and query_batch_key in adata_query.obs.columns:
         map_kwargs["key"] = query_batch_key
     sp.tl.map_embedding(adata_query, adata_ref, **map_kwargs)
+    if "X_pca_harmony" in adata_query.obsm:
+        adata_query.obsm["X_symphony"] = adata_query.obsm["X_pca_harmony"]
 
     if reference_batch_key and reference_batch_key not in adata_ref.obs.columns:
         logging.warning(
@@ -72,7 +75,48 @@ def _annotate_with_symphony(adata_query, cfg: dict, target_col: str, unknown_lab
         k=symphony_k,
     )
 
+    # Symphony mapping confidence metrics (lower distance means better map confidence).
+    try:
+        if hasattr(sp.tl, "per_cell_confidence"):
+            sp.tl.per_cell_confidence(adata_query, adata_ref)
+    except Exception as exc:
+        logging.warning("Could not compute Symphony per-cell confidence: %s", exc)
+
+    try:
+        if hasattr(sp.tl, "per_cluster_confidence") and "leiden" in adata_query.obs.columns:
+            sp.tl.per_cluster_confidence(adata_query, adata_ref, "leiden")
+    except Exception as exc:
+        logging.warning("Could not compute Symphony per-cluster confidence: %s", exc)
+
     adata_query.obs[target_col] = _safe_obs_str(adata_query.obs[target_col], unknown_label)
+    adata_query.uns.setdefault("integration_annotation", {})
+    per_cell_col = "symphony_per_cell_dist"
+    if per_cell_col in adata_query.obs.columns:
+        vals = pd.to_numeric(adata_query.obs[per_cell_col], errors="coerce").dropna()
+        per_cell_summary = {
+            "n_valid": int(vals.size),
+            "mean": float(vals.mean()) if vals.size else None,
+            "median": float(vals.median()) if vals.size else None,
+            "p90": float(vals.quantile(0.90)) if vals.size else None,
+            "p95": float(vals.quantile(0.95)) if vals.size else None,
+            "min": float(vals.min()) if vals.size else None,
+            "max": float(vals.max()) if vals.size else None,
+            "interpretation": "lower_is_better",
+        }
+    else:
+        per_cell_summary = {"available": False}
+
+    adata_query.uns["integration_annotation"]["symphony"] = {
+        "reference_h5ad": reference_path,
+        "reference_label_key": reference_label_key,
+        "reference_batch_key": reference_batch_key,
+        "query_batch_key": query_batch_key,
+        "k": symphony_k,
+        "embedding_key": "X_symphony" if "X_symphony" in adata_query.obsm else "",
+        "per_cell_score_key": per_cell_col if per_cell_col in adata_query.obs.columns else "",
+        "per_cluster_score_key": "symphony_per_cluster_dist" if "symphony_per_cluster_dist" in adata_query.uns else "",
+        "per_cell_summary": per_cell_summary,
+    }
 
     return adata_query
 
@@ -137,6 +181,21 @@ def _annotate_with_scanvi(adata_query, cfg: dict, target_col: str, unknown_label
 
     pred = scanvi_model.predict(adata_joint)
     pred_series = pd.Series(pred, index=adata_joint.obs_names)
+    try:
+        pred_soft = scanvi_model.predict(adata_joint, soft=True)
+        if isinstance(pred_soft, pd.DataFrame):
+            pred_soft_df = pred_soft.copy()
+        else:
+            pred_soft_df = pd.DataFrame(pred_soft, index=adata_joint.obs_names)
+    except Exception as exc:
+        logging.warning("Could not compute SCANVI soft predictions: %s", exc)
+        pred_soft_df = pd.DataFrame(index=adata_joint.obs_names)
+
+    try:
+        latent_joint = scanvi_model.get_latent_representation(adata_joint)
+    except Exception as exc:
+        logging.warning("Could not extract SCANVI latent representation: %s", exc)
+        latent_joint = None
 
     query_mask = adata_joint.obs[source_key].eq("query")
     pred_table = pd.DataFrame(
@@ -151,7 +210,48 @@ def _annotate_with_scanvi(adata_query, cfg: dict, target_col: str, unknown_label
     adata_query.obs.loc[:, target_col] = adata_query.obs["__orig_obs_name"].map(pred_map).fillna(unknown_label).astype(str)
     adata_query.obs[target_col] = _safe_obs_str(adata_query.obs[target_col], unknown_label)
 
+    if not pred_soft_df.empty:
+        pred_soft_df = pred_soft_df.loc[query_mask]
+        pred_soft_df.index = adata_joint.obs.loc[query_mask, "__orig_obs_name"].astype(str).values
+        pred_soft_df = pred_soft_df.reindex(adata_query.obs["__orig_obs_name"].astype(str).values)
+        probs = pred_soft_df.to_numpy(dtype=float, copy=True)
+        probs = np.clip(probs, 1e-12, 1.0)
+        row_sums = probs.sum(axis=1, keepdims=True)
+        row_sums[row_sums == 0] = 1.0
+        probs = probs / row_sums
+        conf = probs.max(axis=1)
+        entropy = -(probs * np.log(probs)).sum(axis=1)
+        if probs.shape[1] > 1:
+            top2 = np.partition(probs, kth=-2, axis=1)[:, -2:]
+            margin = top2[:, 1] - top2[:, 0]
+        else:
+            margin = np.ones(probs.shape[0], dtype=float)
+        adata_query.obs["scanvi_pred_confidence"] = conf
+        adata_query.obs["scanvi_pred_entropy"] = entropy
+        adata_query.obs["scanvi_pred_margin"] = margin
+        adata_query.obs["scanvi_pred_confidence"] = pd.to_numeric(adata_query.obs["scanvi_pred_confidence"], errors="coerce")
+        adata_query.obs["scanvi_pred_entropy"] = pd.to_numeric(adata_query.obs["scanvi_pred_entropy"], errors="coerce")
+        adata_query.obs["scanvi_pred_margin"] = pd.to_numeric(adata_query.obs["scanvi_pred_margin"], errors="coerce")
+    if latent_joint is not None:
+        latent_query = np.asarray(latent_joint)[query_mask.to_numpy(), :]
+        adata_query.obsm["X_scanvi"] = latent_query
+
     adata_query.uns.setdefault("integration_annotation", {})
+    conf_series = (
+        pd.to_numeric(adata_query.obs["scanvi_pred_confidence"], errors="coerce")
+        if "scanvi_pred_confidence" in adata_query.obs.columns
+        else pd.Series(dtype=float)
+    )
+    entropy_series = (
+        pd.to_numeric(adata_query.obs["scanvi_pred_entropy"], errors="coerce")
+        if "scanvi_pred_entropy" in adata_query.obs.columns
+        else pd.Series(dtype=float)
+    )
+    margin_series = (
+        pd.to_numeric(adata_query.obs["scanvi_pred_margin"], errors="coerce")
+        if "scanvi_pred_margin" in adata_query.obs.columns
+        else pd.Series(dtype=float)
+    )
     adata_query.uns["integration_annotation"]["scanvi"] = {
         "reference_h5ad": reference_path,
         "reference_label_key": reference_label_key,
@@ -164,6 +264,23 @@ def _annotate_with_scanvi(adata_query, cfg: dict, target_col: str, unknown_label
         "n_reference_cells": int(adata_ref.n_obs),
         "n_query_cells": int(adata_query.n_obs),
         "n_shared_genes": int(adata_joint.n_vars),
+        "embedding_key": "X_scanvi" if "X_scanvi" in adata_query.obsm else "",
+        "mapping_score_analog": {
+            "confidence_key": "scanvi_pred_confidence" if "scanvi_pred_confidence" in adata_query.obs.columns else "",
+            "entropy_key": "scanvi_pred_entropy" if "scanvi_pred_entropy" in adata_query.obs.columns else "",
+            "margin_key": "scanvi_pred_margin" if "scanvi_pred_margin" in adata_query.obs.columns else "",
+            "confidence_mean": float(conf_series.mean()) if conf_series.notna().any() else None,
+            "confidence_median": float(conf_series.median()) if conf_series.notna().any() else None,
+            "entropy_mean": float(entropy_series.mean()) if entropy_series.notna().any() else None,
+            "entropy_median": float(entropy_series.median()) if entropy_series.notna().any() else None,
+            "margin_mean": float(margin_series.mean()) if margin_series.notna().any() else None,
+            "margin_median": float(margin_series.median()) if margin_series.notna().any() else None,
+            "interpretation": {
+                "scanvi_pred_confidence": "higher_is_better",
+                "scanvi_pred_entropy": "lower_is_better",
+                "scanvi_pred_margin": "higher_is_better",
+            },
+        },
     }
     return adata_query
 

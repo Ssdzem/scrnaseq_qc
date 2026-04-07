@@ -13,4 +13,6 @@ dependencies:
   - harmonypy
   - pip
   - pip:
+      - scib
+      - scib-metrics
       - symphonypy

@@ -47,3 +47,35 @@ evaluation:
   batch_key: "sample_id"
   label_key: "cell_type"
   unknown_label: "Unknown"
+  # Extended benchmarking using scIB.
+  scib:
+    enabled: true
+    # Embeddings to benchmark if present in adata.obsm.
+    embeddings:
+      - "X_integrated"
+      - "X_scVI"
+      - "X_scanvi"
+      - "X_symphony"
+      - "X_harmony"
+      - "X_pca_harmony"
+      - "X_pca"
+    # scib.metrics.metrics options (set to true to include all metric families).
+    ari: true
+    nmi: true
+    silhouette: true
+    pcr: true
+    cell_cycle: true
+    hvg_overlap: true
+    isolated_labels: true
+    isolated_labels_f1: true
+    isolated_labels_asw: true
+    graph_connectivity: true
+    trajectory: true
+    kbet: true
+    lisi_graph: true
+    ilisi: true
+    clisi: true
+    type: "embed"
+    lisi_subsample: 0.5
+    n_cores: 1
+    verbose: false
