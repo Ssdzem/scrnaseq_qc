@@ -21,9 +21,9 @@ annotation:
   unknown_label: "Unknown"
   symphony:
     # Reference atlas with precomputed PCA/harmony context suitable for Symphony mapping.
-    reference_h5ad: ""
+    reference_h5ad: "out/integration_annotation/reference/lca_human_reference.h5ad"
     # Label column in reference atlas to transfer to query cells.
-    reference_label_key: "cell_type"
+    reference_label_key: "annot"
     # Optional batch columns.
     reference_batch_key: "sample_id"
     query_batch_key: "sample_id"
@@ -31,8 +31,8 @@ annotation:
     k: 5
   scanvi:
     # Reference atlas containing known labels for semi-supervised transfer.
-    reference_h5ad: ""
-    reference_label_key: "cell_type"
+    reference_h5ad: "out/integration_annotation/reference/lca_human_reference.h5ad"
+    reference_label_key: "annot"
     # Batch key and optional counts layer used for SCVI/SCANVI setup.
     batch_key: "sample_id"
     counts_layer: "counts"
@@ -79,3 +79,15 @@ evaluation:
     lisi_subsample: 0.5
     n_cores: 1
     verbose: false
+
+
+reference_atlas:
+  # Build a local reference h5ad from the Liver Cell Atlas raw 10x triplets + metadata.
+  enabled: false
+  zip_url: "https://www.livercellatlas.org/data_files/toDownload/rawData_human.zip"
+  metadata_url: "https://www.livercellatlas.org/data_files/toDownload/annot_humanAll.csv"
+  matrix_subdir: "countTable_human"
+  metadata_join_key: "cell"
+  metadata_label_col: "annot"
+  cache_dir: "out/integration_annotation/reference/cache"
+  extract_dir: "out/integration_annotation/reference/rawData_human"
