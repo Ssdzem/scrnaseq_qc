@@ -14,7 +14,7 @@ rule ia_annotate_all:
     shell:
         r"""
         mkdir -p $(dirname {log})
-        $CONDA_PREFIX/bin/python workflow/modules/integration_annotation/scripts/annotate_cells.py \
+        PYTHONNOUSERSITE=1 $CONDA_PREFIX/bin/python -s workflow/modules/integration_annotation/scripts/annotate_cells.py \
           --scope all_studies \
           --input {input.integrated} \
           --config {input.ia_config} \
@@ -42,7 +42,7 @@ rule ia_annotate_study:
     shell:
         r"""
         mkdir -p $(dirname {log})
-        $CONDA_PREFIX/bin/python workflow/modules/integration_annotation/scripts/annotate_cells.py \
+        PYTHONNOUSERSITE=1 $CONDA_PREFIX/bin/python -s workflow/modules/integration_annotation/scripts/annotate_cells.py \
           --scope study \
           --study {params.study} \
           --input {input.integrated} \
