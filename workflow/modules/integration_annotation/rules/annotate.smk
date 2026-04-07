@@ -3,6 +3,7 @@ rule ia_annotate_all:
         integrated="out/integration_annotation/all_studies/all_integrated.h5ad",
         ia_config=IA_CONFIG_PATH,
         integrated_done="out/integration_annotation/all_studies/.integrated_done",
+        reference=_ia_reference_targets,
     output:
         annotated="out/integration_annotation/all_studies/all_annotated.h5ad",
         summary="out/integration_annotation/all_studies/annotation_summary.csv",
@@ -29,6 +30,7 @@ rule ia_annotate_study:
         integrated="out/integration_annotation/{study}/{study}_integrated.h5ad",
         ia_config=IA_CONFIG_PATH,
         integrated_done="out/integration_annotation/{study}/.integrated_done",
+        reference=_ia_reference_targets,
     output:
         annotated="out/integration_annotation/{study}/{study}_annotated.h5ad",
         summary="out/integration_annotation/{study}/annotation_summary.csv",
