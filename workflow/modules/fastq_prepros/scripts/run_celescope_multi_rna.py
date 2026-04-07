@@ -4,6 +4,22 @@ import subprocess
 from pathlib import Path
 
 
+def _prefer_conda_executable(name: str) -> str:
+    """Return executable from active conda env when available.
+
+    Snakemake runs this script inside a rule-scoped conda env, but user-local
+    binaries (e.g. ~/.local/bin/celescope) can leak in through PATH and create
+    mixed Python package stacks. Prefer $CONDA_PREFIX/bin/<name> explicitly.
+    """
+
+    conda_prefix = os.environ.get("CONDA_PREFIX")
+    if conda_prefix:
+        candidate = Path(conda_prefix) / "bin" / name
+        if candidate.exists() and os.access(candidate, os.X_OK):
+            return str(candidate)
+    return name
+
+
 def _rename_fastqs_in_place(fastqs: list[str]) -> None:
     """Normalize FASTQ names in-place to CeleScope-compatible *_1/_2 scheme.
 
@@ -72,8 +88,10 @@ def main() -> int:
 
     # CeleScope resolves paths in the mapfile relative to the working directory.
     # Therefore, pass a mapfile path relative to `outdir` and run with cwd=outdir.
+    multi_rna_bin = _prefer_conda_executable("multi_rna")
+
     cmd = [
-        "multi_rna",
+        multi_rna_bin,
         "--mapfile",
         mapfile.name,
         "--genomeDir",
@@ -88,6 +106,8 @@ def main() -> int:
 
     env = os.environ.copy()
     env.setdefault("OMP_NUM_THREADS", str(args.threads))
+    if env.get("CONDA_PREFIX"):
+        env["PATH"] = str(Path(env["CONDA_PREFIX"]) / "bin") + os.pathsep + env.get("PATH", "")
     subprocess.run(cmd, check=True, env=env, cwd=str(outdir))
 
     if args.mod == "shell":
