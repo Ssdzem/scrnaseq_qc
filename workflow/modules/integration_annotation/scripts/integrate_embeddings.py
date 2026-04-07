@@ -73,9 +73,14 @@ def run_integration(adata, cfg: dict, scope_label: str):
         layer_for_scvi = "counts" if "counts" in adata_hvg.layers else None
         scvi.model.SCVI.setup_anndata(adata_hvg, layer=layer_for_scvi, batch_key=scvi_batch_key)
         model = scvi.model.SCVI(adata_hvg)
+        scvi.settings.dl_num_workers = 8
+        scvi.settings.num_threads = 16
+        scvi.settings.dl_persistent_workers = True
         model.train(
           max_epochs=400,
           validation_size=0.1,
+          accelerator="cpu",
+          devices=1,
           check_val_every_n_epoch=1,
           early_stopping=True,
           early_stopping_monitor="elbo_validation",
