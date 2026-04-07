@@ -3,6 +3,7 @@ import json
 import logging
 from pathlib import Path
 
+import anndata as ad
 import numpy as np
 import scanpy as sc
 import yaml
@@ -136,6 +137,8 @@ def main(argv: list[str] | None = None):
     args = p.parse_args(argv)
 
     setup_logging(args.log)
+    logging.info("Runtime: scanpy=%s anndata=%s", sc.__version__, ad.__version__)
+    logging.info("Runtime paths: scanpy=%s anndata=%s", sc.__file__, ad.__file__)
     cfg = read_full_config(args.config)
     ia_cfg = resolve_ia_cfg(cfg)
 
