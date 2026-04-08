@@ -3,9 +3,9 @@ channels:
   - conda-forge
   - bioconda
 dependencies:
-  - python=3.10
+  - python
   - scanpy>=1.10
-  - anndata>=0.10.8
+  - anndata>=0.12.5
   - pandas
   - numpy
   - pyyaml
