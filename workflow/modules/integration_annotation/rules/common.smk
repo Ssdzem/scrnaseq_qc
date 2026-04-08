@@ -31,7 +31,7 @@ def _ia_reference_h5ad() -> str:
 IA_REFERENCE_H5AD = _ia_reference_h5ad() or "data/ref/lca_human_reference.h5ad"
 
 
-def _ia_reference_targets():
+def _ia_reference_targets(_wildcards=None):
     enabled = bool(IA_REFERENCE_CFG.get("enabled", False))
     method = str(IA_ANNOTATION_CFG.get("method", "")).strip().lower()
     if enabled and method in {"symphony", "scanvi"}:

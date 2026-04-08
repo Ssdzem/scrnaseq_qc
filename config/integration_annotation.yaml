@@ -15,7 +15,7 @@ integration:
 
 annotation:
   # Strategy options: "from_existing_column", "from_leiden", "symphony", "scanvi", or fallback to Unknown.
-  method: "from_existing_column"
+  method: "symphony"
   source_column: "cell_type"
   target_column: "cell_type"
   unknown_label: "Unknown"
@@ -25,8 +25,8 @@ annotation:
     # Label column in reference atlas to transfer to query cells.
     reference_label_key: "annot"
     # Optional batch columns.
-    reference_batch_key: "sample_id"
-    query_batch_key: "sample_id"
+    reference_batch_key: "patient"
+    query_batch_key: "study_accession"
     # k in kNN label transfer.
     k: 5
   scanvi:
@@ -83,7 +83,7 @@ evaluation:
 
 reference_atlas:
   # Build a local reference h5ad from the Liver Cell Atlas raw 10x triplets + metadata.
-  enabled: false
+  enabled: true
   zip_url: "https://www.livercellatlas.org/data_files/toDownload/rawData_human.zip"
   metadata_url: "https://www.livercellatlas.org/data_files/toDownload/annot_humanAll.csv"
   matrix_subdir: "countTable_human"
