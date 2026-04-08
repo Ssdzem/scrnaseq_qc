@@ -1,4 +1,5 @@
 import argparse
+import gzip
 import json
 import logging
 import shutil
@@ -61,6 +62,87 @@ def _normalize_join_key(series: pd.Series) -> pd.Series:
     return s.str.replace(r"-1$", "", regex=True)
 
 
+def _choose_var_names_mode(triplet_dir: Path) -> str:
+    feature_candidates = (
+        triplet_dir / "features.tsv.gz",
+        triplet_dir / "features.tsv",
+        triplet_dir / "genes.tsv.gz",
+        triplet_dir / "genes.tsv",
+    )
+    feature_path = next((p for p in feature_candidates if p.exists()), None)
+    if feature_path is None:
+        logging.warning(
+            "Could not locate features/genes table in %s. Defaulting var_names='gene_symbols'.",
+            triplet_dir,
+        )
+        return "gene_symbols"
+
+    preview = pd.read_csv(
+        feature_path,
+        sep="\t",
+        header=None,
+        nrows=10,
+        compression="infer",
+    )
+    if preview.shape[1] >= 2:
+        return "gene_symbols"
+
+    logging.warning(
+        "Detected single-column feature table (%s). "
+        "Using var_names='gene_ids' for scanpy.read_10x_mtx.",
+        feature_path,
+    )
+    return "gene_ids"
+
+
+def _open_maybe_gzip(path: Path, mode: str):
+    if ".gz" in path.suffixes:
+        return gzip.open(path, mode, encoding="utf-8")
+    return path.open(mode, encoding="utf-8")
+
+
+def _ensure_scanpy_compatible_features(triplet_dir: Path) -> None:
+    """Patch single-column 10x feature tables to include expected columns.
+
+    Some public datasets ship `features.tsv(.gz)` with only one column.
+    Older/newer Scanpy builds still access column 1 internally, which raises
+    `KeyError: 1` even when `var_names='gene_ids'`.
+    """
+    feature_candidates = (
+        triplet_dir / "features.tsv.gz",
+        triplet_dir / "features.tsv",
+        triplet_dir / "genes.tsv.gz",
+        triplet_dir / "genes.tsv",
+    )
+    feature_path = next((p for p in feature_candidates if p.exists()), None)
+    if feature_path is None:
+        return
+
+    preview = pd.read_csv(
+        feature_path,
+        sep="\t",
+        header=None,
+        nrows=20,
+        compression="infer",
+    )
+    if preview.shape[1] >= 2:
+        return
+
+    logging.warning(
+        "Rewriting single-column feature table to Scanpy-compatible layout: %s",
+        feature_path,
+    )
+    tmp_path = feature_path.with_suffix(feature_path.suffix + ".tmp")
+    with _open_maybe_gzip(feature_path, "rt") as fin, _open_maybe_gzip(tmp_path, "wt") as fout:
+        for raw in fin:
+            gene = raw.rstrip("\n").split("\t")[0]
+            if not gene:
+                continue
+            # 10x v3 compatible: gene_id, gene_symbol, feature_type
+            fout.write(f"{gene}\t{gene}\tGene Expression\n")
+    tmp_path.replace(feature_path)
+
+
 def build_reference_anndata(full_cfg: dict, output_h5ad: str) -> tuple[object, dict]:
     ref_cfg = full_cfg.get("reference_atlas", {})
     if not bool(ref_cfg.get("enabled", False)):
@@ -90,7 +172,9 @@ def build_reference_anndata(full_cfg: dict, output_h5ad: str) -> tuple[object, d
 
     triplet_dir = _resolve_triplet_dir(extract_dir, matrix_subdir)
     logging.info("Reading 10x matrix from %s", triplet_dir)
-    adata = sc.read_10x_mtx(str(triplet_dir), var_names="gene_symbols", make_unique=True)
+    _ensure_scanpy_compatible_features(triplet_dir)
+    var_names_mode = _choose_var_names_mode(triplet_dir)
+    adata = sc.read_10x_mtx(str(triplet_dir), var_names=var_names_mode, make_unique=True)
 
     md = pd.read_csv(metadata_path)
     if metadata_join_key not in md.columns:
