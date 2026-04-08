@@ -61,6 +61,39 @@ def _normalize_join_key(series: pd.Series) -> pd.Series:
     return s.str.replace(r"-1$", "", regex=True)
 
 
+def _choose_var_names_mode(triplet_dir: Path) -> str:
+    feature_candidates = (
+        triplet_dir / "features.tsv.gz",
+        triplet_dir / "features.tsv",
+        triplet_dir / "genes.tsv.gz",
+        triplet_dir / "genes.tsv",
+    )
+    feature_path = next((p for p in feature_candidates if p.exists()), None)
+    if feature_path is None:
+        logging.warning(
+            "Could not locate features/genes table in %s. Defaulting var_names='gene_symbols'.",
+            triplet_dir,
+        )
+        return "gene_symbols"
+
+    preview = pd.read_csv(
+        feature_path,
+        sep="\t",
+        header=None,
+        nrows=10,
+        compression="infer",
+    )
+    if preview.shape[1] >= 2:
+        return "gene_symbols"
+
+    logging.warning(
+        "Detected single-column feature table (%s). "
+        "Using var_names='gene_ids' for scanpy.read_10x_mtx.",
+        feature_path,
+    )
+    return "gene_ids"
+
+
 def build_reference_anndata(full_cfg: dict, output_h5ad: str) -> tuple[object, dict]:
     ref_cfg = full_cfg.get("reference_atlas", {})
     if not bool(ref_cfg.get("enabled", False)):
@@ -90,7 +123,8 @@ def build_reference_anndata(full_cfg: dict, output_h5ad: str) -> tuple[object, d
 
     triplet_dir = _resolve_triplet_dir(extract_dir, matrix_subdir)
     logging.info("Reading 10x matrix from %s", triplet_dir)
-    adata = sc.read_10x_mtx(str(triplet_dir), var_names="gene_symbols", make_unique=True)
+    var_names_mode = _choose_var_names_mode(triplet_dir)
+    adata = sc.read_10x_mtx(str(triplet_dir), var_names=var_names_mode, make_unique=True)
 
     md = pd.read_csv(metadata_path)
     if metadata_join_key not in md.columns:
