@@ -264,7 +264,7 @@ def build_reference_anndata(full_cfg: dict, output_h5ad: str) -> tuple[object, d
         "n_genes": int(adata.n_vars),
         "n_cells_with_label": int(adata.obs[metadata_label_col].notna().sum()),
     }
-
+    adata = adata[adata.obs["annot"].notna()].copy()
     adata.write_h5ad(str(output_path), compression="gzip")
     logging.info("Wrote reference atlas h5ad: %s", output_path)
 
