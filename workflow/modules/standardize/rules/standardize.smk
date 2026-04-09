@@ -168,6 +168,8 @@ rule standardize_study:
         study=lambda wc: wc.study,
     log:
         "out/logs/standardize/{study}.log"
+    threads:
+        lambda wc: int(config.get("standardize", {}).get("workers", 1))
     conda:
         lambda wc: _pipeline_env(wc.study)
     shell:
@@ -177,5 +179,6 @@ rule standardize_study:
           --spec {input.spec} \
           --study {params.study} \
           --output {output.h5ad} \
+          --workers {threads} \
           --log {log}
         """

@@ -46,6 +46,7 @@ def _run_cleaner(
     study: str,
     study_spec: dict,
     output_h5ad: Path,
+    workers: int,
     log,
 ) -> None:
     if cleaner == "count_matrix_10x":
@@ -55,7 +56,13 @@ def _run_cleaner(
     elif cleaner == "tenx_h5_multi":
         from cleaners.tenx_h5_multi import run_tenx_h5_multi
 
-        run_tenx_h5_multi(study=study, study_spec=study_spec, output_h5ad=output_h5ad, log=log)
+        run_tenx_h5_multi(
+            study=study,
+            study_spec=study_spec,
+            output_h5ad=output_h5ad,
+            log=log,
+            workers=workers,
+        )
     elif cleaner == "metadata_join":
         from cleaners.metadata_join import run_metadata_join
 
@@ -75,13 +82,14 @@ def _run_cleaner(
             study=study,
             study_spec=study_spec,
             output_h5ad=output_h5ad,
+            workers=workers,
             log=log,
         )
     else:
         raise SystemExit(f"Cleaner '{cleaner}' is not wired in _run_cleaner")
 
 
-def _run_pipeline(*, study: str, study_spec: dict, output_h5ad: Path, log) -> None:
+def _run_pipeline(*, study: str, study_spec: dict, output_h5ad: Path, workers: int, log) -> None:
     cleaners = _pipeline_cleaners(study_spec)
     inp = study_spec.setdefault("input", {})
     sample_id = str(inp.get("sample_id", study)).strip() or study
@@ -150,6 +158,7 @@ def _run_pipeline(*, study: str, study_spec: dict, output_h5ad: Path, log) -> No
             study=study,
             study_spec=local_spec,
             output_h5ad=out_path,
+            workers=workers,
             log=log,
         )
 
@@ -163,6 +172,7 @@ def main() -> None:
     parser.add_argument("--spec", required=True)
     parser.add_argument("--study", required=True)
     parser.add_argument("--output", required=True)
+    parser.add_argument("--workers", type=int, default=1)
     parser.add_argument("--log", required=True)
     args = parser.parse_args()
 
@@ -176,7 +186,13 @@ def main() -> None:
     with open(log_path, "w", encoding="utf-8") as log:
         log_line(log, json.dumps({"study": args.study, "spec": args.spec}), with_ts=False)
         log_kv(log, "standardize.start", study=args.study, spec=args.spec)
-        _run_pipeline(study=args.study, study_spec=study_spec, output_h5ad=out_path, log=log)
+        _run_pipeline(
+            study=args.study,
+            study_spec=study_spec,
+            output_h5ad=out_path,
+            workers=max(1, int(args.workers)),
+            log=log,
+        )
         log_kv(log, "standardize.complete", study=args.study, output=args.output)
 
 
