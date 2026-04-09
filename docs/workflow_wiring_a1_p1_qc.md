@@ -195,10 +195,10 @@ Config/selection:
 - Converts each to AnnData then to intermediate 10x-style H5.
 - Stores generated sample list into spec input for downstream processing and writes placeholder h5ad.
 
-6. `hra007511_count_matrix_runs.py`
-- Filters study rows from metadata CSV.
-- Selects runs (optionally by env/input controls).
-- Standardizes each run via `count_matrix_10x` then merges runs with `tenx_h5_multi`.
+6. `count_matrix_10x_multi_runs.py`
+- Loads a run table from CSV and filters included rows for a study.
+- Standardizes each run via `count_matrix_10x` and prepares `input.samples` for downstream `tenx_h5_multi`.
+- Supports configurable run-table column names and triplet layout template.
 
 ---
 

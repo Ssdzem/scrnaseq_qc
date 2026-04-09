@@ -68,10 +68,10 @@ def _run_cleaner(
         from cleaners.csv_handler import run_csv_handler
 
         run_csv_handler(study=study, study_spec=study_spec, output_h5ad=output_h5ad, log=log)
-    elif cleaner == "hra007511_count_matrix_runs":
-        from cleaners.hra007511_count_matrix_runs import run_hra007511_count_matrix_runs
+    elif cleaner == "count_matrix_10x_multi_runs":
+        from cleaners.count_matrix_10x_multi_runs import run_count_matrix_10x_multi_runs
 
-        run_hra007511_count_matrix_runs(
+        run_count_matrix_10x_multi_runs(
             study=study,
             study_spec=study_spec,
             output_h5ad=output_h5ad,
@@ -115,7 +115,7 @@ def _run_pipeline(*, study: str, study_spec: dict, output_h5ad: Path, log) -> No
             metadata_already_joined = True
         elif cleaner == "tenx_h5_multi":
             use_explicit_samples = bool(inp.get("samples")) and (
-                prev_h5ad is None or prev_cleaner == "csv_handler"
+                prev_h5ad is None or prev_cleaner in {"csv_handler", "count_matrix_10x_multi_runs"}
             )
             if use_explicit_samples:
                 # Use explicit input.samples for:

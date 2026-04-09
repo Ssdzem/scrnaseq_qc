@@ -42,11 +42,11 @@ CLEANER_REGISTRY: dict[str, CleanerSpec] = {
         output_type="h5ad",
         path_keys=("input.raw_dir",),
     ),
-    "hra007511_count_matrix_runs": CleanerSpec(
+    "count_matrix_10x_multi_runs": CleanerSpec(
         env="py",
         input_type="runs_count_matrix",
         output_type="h5ad",
-        path_keys=("input.counts_root", "input.metadata", "input.runs_csv"),
+        path_keys=("input.triplet_root", "input.runs_csv"),
     ),
 }
 
