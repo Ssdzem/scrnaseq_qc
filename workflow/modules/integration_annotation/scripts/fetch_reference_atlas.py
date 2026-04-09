@@ -184,6 +184,9 @@ def _prepare_symphony_reference(adata, full_cfg: dict):
         # Keep a Symphony-compatible slot even without Harmony correction.
         adata.obsm["X_pca_harmony"] = adata.obsm["X_pca"].copy()
 
+    sc.pp.neighbors(adata)
+    sc.tl.umap(adata)
+
     return adata
 
 
