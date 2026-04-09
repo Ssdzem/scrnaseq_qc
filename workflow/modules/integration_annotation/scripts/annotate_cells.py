@@ -72,7 +72,6 @@ def _annotate_with_symphony(adata_query, cfg: dict, target_col: str, unknown_lab
         adata_ref,
         reference_label_key,
         query_labels=target_col,
-        k=symphony_k,
     )
 
     # Symphony mapping confidence metrics (lower distance means better map confidence).
