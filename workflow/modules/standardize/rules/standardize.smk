@@ -112,6 +112,33 @@ def _pipeline_env(study: str) -> str:
     return "../env/standardize_r.yaml" if needs_r else "../env/standardize_py.yaml"
 
 
+def _workers_for_study(study: str) -> int:
+    """Resolve worker count for a study.
+
+    Precedence:
+      1) env var A1_P1_STANDARDIZE_WORKERS
+      2) spec input.workers
+      3) default 1
+    """
+    env_workers = os.getenv("A1_P1_STANDARDIZE_WORKERS")
+    if env_workers is not None and str(env_workers).strip():
+        try:
+            return max(1, int(env_workers))
+        except ValueError as exc:
+            raise WorkflowError("A1_P1_STANDARDIZE_WORKERS must be an integer >= 1") from exc
+
+    spec = _load_spec(study)
+    inp = spec.get("input") or {}
+    spec_workers = inp.get("workers")
+    if spec_workers is not None:
+        try:
+            return max(1, int(spec_workers))
+        except (TypeError, ValueError) as exc:
+            raise WorkflowError(f"input.workers in config/standardize/{study}.yaml must be an integer >= 1") from exc
+
+    return 1
+
+
 STUDIES = _studies_to_process()
 
 
@@ -168,6 +195,8 @@ rule standardize_study:
         study=lambda wc: wc.study,
     log:
         "out/logs/standardize/{study}.log"
+    threads:
+        lambda wc: _workers_for_study(wc.study)
     conda:
         lambda wc: _pipeline_env(wc.study)
     shell:
@@ -177,5 +206,6 @@ rule standardize_study:
           --spec {input.spec} \
           --study {params.study} \
           --output {output.h5ad} \
+          --workers {threads} \
           --log {log}
         """
