@@ -143,6 +143,50 @@ def _ensure_scanpy_compatible_features(triplet_dir: Path) -> None:
     tmp_path.replace(feature_path)
 
 
+def _prepare_symphony_reference(adata, full_cfg: dict):
+    ann_cfg = full_cfg.get("annotation", {}) if isinstance(full_cfg, dict) else {}
+    method = str(ann_cfg.get("method", "")).strip().lower()
+    if method != "symphony":
+        return adata
+
+    import symphonypy as sp
+
+    sym_cfg = ann_cfg.get("symphony", {}) if isinstance(ann_cfg, dict) else {}
+    target_sum = float(sym_cfg.get("target_sum", 1e5))
+    n_top_genes = int(sym_cfg.get("n_top_genes", 3000))
+    n_comps = int(sym_cfg.get("n_comps", 30))
+    batch_key_ref = str(sym_cfg.get("reference_batch_key", "")).strip()
+
+    logging.info(
+        "Preparing reference atlas for symphonypy (target_sum=%s, n_top_genes=%s, n_comps=%s, batch_key=%s)",
+        target_sum,
+        n_top_genes,
+        n_comps,
+        batch_key_ref or "<none>",
+    )
+
+    sc.pp.normalize_total(adata, target_sum=target_sum)
+    sc.pp.log1p(adata)
+    hvg_kwargs = {"n_top_genes": min(max(100, n_top_genes), adata.n_vars)}
+    if batch_key_ref and batch_key_ref in adata.obs.columns:
+        hvg_kwargs["batch_key"] = batch_key_ref
+    sc.pp.highly_variable_genes(adata, **hvg_kwargs)
+    adata.raw = adata.copy()
+    if "highly_variable" in adata.var.columns and bool(adata.var["highly_variable"].any()):
+        adata = adata[:, adata.var["highly_variable"]].copy()
+    sc.pp.scale(adata, max_value=10)
+    n_comps_eff = max(2, min(n_comps, adata.n_vars - 1)) if adata.n_vars > 2 else adata.n_vars
+    sc.pp.pca(adata, n_comps=n_comps_eff, zero_center=False)
+
+    if batch_key_ref and batch_key_ref in adata.obs.columns and adata.obs[batch_key_ref].nunique(dropna=True) > 1:
+        sp.pp.harmony_integrate(adata, key=batch_key_ref)
+    else:
+        # Keep a Symphony-compatible slot even without Harmony correction.
+        adata.obsm["X_pca_harmony"] = adata.obsm["X_pca"].copy()
+
+    return adata
+
+
 def build_reference_anndata(full_cfg: dict, output_h5ad: str) -> tuple[object, dict]:
     ref_cfg = full_cfg.get("reference_atlas", {})
     if not bool(ref_cfg.get("enabled", False)):
@@ -192,6 +236,7 @@ def build_reference_anndata(full_cfg: dict, output_h5ad: str) -> tuple[object, d
     md = md[~md.index.duplicated(keep="first")]
 
     adata.obs = adata.obs.join(md, on="__barcode_norm", how="left")
+    adata = _prepare_symphony_reference(adata, full_cfg)
 
     adata.uns.setdefault("integration_annotation", {})
     adata.uns["integration_annotation"]["reference_atlas"] = {
