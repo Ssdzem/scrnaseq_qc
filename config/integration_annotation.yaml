@@ -27,8 +27,6 @@ annotation:
     # Optional batch columns.
     reference_batch_key: "patient"
     query_batch_key: "study_accession"
-    # k in kNN label transfer.
-    k: 5
   scanvi:
     # Reference atlas containing known labels for semi-supervised transfer.
     reference_h5ad: "data/ref/lca_human_reference.h5ad"
