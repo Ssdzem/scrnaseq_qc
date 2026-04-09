@@ -7,6 +7,7 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import scanpy as sc
 import yaml
@@ -179,7 +180,18 @@ def _prepare_symphony_reference(adata, full_cfg: dict):
     sc.pp.pca(adata, n_comps=n_comps_eff, zero_center=False)
 
     if batch_key_ref and batch_key_ref in adata.obs.columns and adata.obs[batch_key_ref].nunique(dropna=True) > 1:
-        sp.pp.harmony_integrate(adata, key=batch_key_ref)
+        import harmonypy as hm
+
+        pca = adata.obsm["X_pca"]
+        n_pcs = pca.shape[1]
+        ho = hm.run_harmony(pca, adata.obs, [batch_key_ref])
+        z_corr = np.asarray(ho.Z_corr)
+        if z_corr.shape == (n_pcs, adata.n_obs):
+            z_corr = z_corr.T
+        if z_corr.shape != (adata.n_obs, n_pcs):
+            raise ValueError(f"Unexpected Harmony shape: {z_corr.shape}")
+        # symphonypy expects the harmony-corrected embedding in X_pca_harmony.
+        adata.obsm["X_pca_harmony"] = z_corr
     else:
         # Keep a Symphony-compatible slot even without Harmony correction.
         adata.obsm["X_pca_harmony"] = adata.obsm["X_pca"].copy()
