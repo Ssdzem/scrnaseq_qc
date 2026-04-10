@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 from typing import TextIO
 
@@ -317,7 +318,82 @@ def _fill_obs_column_if_missing(
     log_line(log, f"[{study}] Preserved '{column}' and filled {missing_count} missing values with '{fill_value}'")
 
 
-def run_tenx_h5_multi(*, study: str, study_spec: dict, output_h5ad: Path, log: TextIO) -> None:
+def _resolve_workers(*, workers: int, n_samples: int) -> int:
+    if n_samples <= 1:
+        return 1
+    return max(1, min(int(workers), int(n_samples)))
+
+
+def _prepare_loaded_sample(
+    *,
+    study: str,
+    sample_id: str,
+    a: ad.AnnData,
+    qc_cfg: dict | None,
+) -> tuple[str, ad.AnnData, list[str]]:
+    messages: list[str] = []
+    sample_id = str(sample_id)
+    a.var_names_make_unique()
+    _fill_obs_column_if_missing_in_memory(adata=a, column="sample_id", fill_value=sample_id, messages=messages)
+    _fill_obs_column_if_missing_in_memory(
+        adata=a, column="study_accession", fill_value=study, messages=messages
+    )
+    messages.append(f"Loaded {sample_id}: n_obs={a.n_obs} n_vars={a.n_vars}")
+
+    if qc_cfg is not None:
+        before = a.n_obs
+        # QC implementation is shared and deterministic per sample.
+        # It mutates adata in-place and then returns filtered copy.
+        buffer = _ListLog()
+        a = _apply_sample_mad_qc(a, sample_id=sample_id, qc_cfg=qc_cfg, log=buffer)
+        messages.extend(buffer.lines)
+        messages.append(f"QC-filtered {sample_id}: n_obs={before} -> {a.n_obs}")
+
+    return sample_id, a, messages
+
+
+def _fill_obs_column_if_missing_in_memory(
+    *,
+    adata: ad.AnnData,
+    column: str,
+    fill_value: str,
+    messages: list[str],
+) -> None:
+    fill_value = str(fill_value)
+    if column not in adata.obs.columns:
+        adata.obs[column] = fill_value
+        messages.append(f"Filled missing obs column '{column}' with fallback value '{fill_value}'")
+        return
+
+    col = adata.obs[column]
+    mask = col.map(_is_missing_like)
+    missing_count = int(mask.sum())
+    if missing_count == 0:
+        messages.append(f"Preserved existing obs column '{column}' (no missing values)")
+        return
+
+    col = col.astype(object)
+    col.loc[mask] = fill_value
+    adata.obs[column] = col
+    messages.append(f"Preserved '{column}' and filled {missing_count} missing values with '{fill_value}'")
+
+
+class _ListLog:
+    def __init__(self) -> None:
+        self.lines: list[str] = []
+
+    def write(self, text: str) -> int:
+        if text:
+            for line in str(text).splitlines():
+                if line.strip():
+                    self.lines.append(line)
+        return len(text)
+
+    def flush(self) -> None:
+        return
+
+
+def run_tenx_h5_multi(*, study: str, study_spec: dict, output_h5ad: Path, log: TextIO, workers: int = 1) -> None:
     inp = study_spec.get("input", {})
     samples = _require_list(inp.get("samples"), "input.samples")
     samples_df = _normalize_sample_table(samples)
@@ -329,10 +405,12 @@ def run_tenx_h5_multi(*, study: str, study_spec: dict, output_h5ad: Path, log: T
         log_line(log, f"[{study}] QC config={qc_cfg}")
 
     sample_adatas: list[tuple[str, ad.AnnData]] = []
+    effective_workers = _resolve_workers(workers=workers, n_samples=len(samples_df))
+    log_line(log, f"[{study}] tenx_h5_multi worker threads={effective_workers}")
     for row in samples_df.itertuples(index=False):
         sample_id = str(row.sample_id)
-        h5_val = getattr(row, 'h5', None)
-        h5ad_val = getattr(row, 'h5ad', None)
+        h5_val = getattr(row, "h5", None)
+        h5ad_val = getattr(row, "h5ad", None)
         if isinstance(h5_val, float) and pd.isna(h5_val):
             h5_val = None
         if isinstance(h5ad_val, float) and pd.isna(h5ad_val):
@@ -355,6 +433,7 @@ def run_tenx_h5_multi(*, study: str, study_spec: dict, output_h5ad: Path, log: T
         study_spec=study_spec,
         sample_adatas=sample_adatas,
         output_h5ad=output_h5ad,
+        workers=effective_workers,
         log=log,
     )
 
@@ -365,6 +444,7 @@ def run_tenx_adata_multi(
     study_spec: dict,
     sample_adatas: list[tuple[str, ad.AnnData]],
     output_h5ad: Path,
+    workers: int = 1,
     log: TextIO,
 ) -> None:
     inp = study_spec.get("input", {})
@@ -376,18 +456,64 @@ def run_tenx_adata_multi(
         log_line(log, f"[{study}] QC config={qc_cfg}")
 
     adatas: list[ad.AnnData] = []
-    for sample_id, a in sample_adatas:
-        sample_id = str(sample_id)
-        a.var_names_make_unique()
-        _fill_obs_column_if_missing(adata=a, column="sample_id", fill_value=sample_id, study=study, log=log)
-        _fill_obs_column_if_missing(adata=a, column="study_accession", fill_value=study, study=study, log=log)
-        log_line(log, f"[{study}] Loaded {sample_id}: n_obs={a.n_obs} n_vars={a.n_vars}")
+    effective_workers = _resolve_workers(workers=workers, n_samples=len(sample_adatas))
+    log_line(log, f"[{study}] tenx_adata_multi worker threads={effective_workers}")
 
-        if qc_cfg is not None:
-            before = a.n_obs
-            a = _apply_sample_mad_qc(a, sample_id=sample_id, qc_cfg=qc_cfg, log=log)
-            log_line(log, f"[{study}] QC-filtered {sample_id}: n_obs={before} -> {a.n_obs}")
+    if effective_workers == 1:
+        total = len(sample_adatas)
+        for idx, (sample_id, a) in enumerate(sample_adatas, start=1):
+            log_line(log, f"[{study}] tenx_adata_multi progress queued={idx}/{total} sample_id={sample_id}")
+            sample_id_out, processed, messages = _prepare_loaded_sample(
+                study=study,
+                sample_id=str(sample_id),
+                a=a,
+                qc_cfg=qc_cfg,
+            )
+            log_line(log, f"[{study}] tenx_adata_multi progress completed={idx}/{total} sample_id={sample_id_out}")
+            for msg in messages:
+                log_line(log, f"[{study}] {msg}")
+            adatas.append(processed)
+    else:
+        total = len(sample_adatas)
+        results_by_index: dict[int, tuple[ad.AnnData, list[str]]] = {}
+        with ThreadPoolExecutor(max_workers=effective_workers) as pool:
+            futures = {}
+            for idx, item in enumerate(sample_adatas, start=1):
+                sample_id = str(item[0])
+                log_line(log, f"[{study}] tenx_adata_multi progress queued={idx}/{total} sample_id={sample_id}")
+                fut = pool.submit(
+                    _prepare_loaded_sample,
+                    study=study,
+                    sample_id=sample_id,
+                    a=item[1],
+                    qc_cfg=qc_cfg,
+                )
+                futures[fut] = idx
 
-        adatas.append(a)
+            completed = 0
+            pending = set(futures)
+            while pending:
+                done_now, pending = wait(pending, timeout=30, return_when=FIRST_COMPLETED)
+                if not done_now:
+                    log_line(
+                        log,
+                        f"[{study}] tenx_adata_multi heartbeat completed={completed}/{total} pending={len(pending)}",
+                    )
+                    continue
+                for fut in done_now:
+                    idx = futures[fut]
+                    sample_id_out, processed, messages = fut.result()
+                    completed += 1
+                    log_line(
+                        log,
+                        f"[{study}] tenx_adata_multi progress completed={completed}/{total} sample_id={sample_id_out}",
+                    )
+                    results_by_index[idx] = (processed, messages)
+
+        for idx in sorted(results_by_index):
+            processed, messages = results_by_index[idx]
+            for msg in messages:
+                log_line(log, f"[{study}] {msg}")
+            adatas.append(processed)
 
     _finalize_tenx_multi(study=study, inp=inp, adatas=adatas, output_h5ad=output_h5ad, log=log)
