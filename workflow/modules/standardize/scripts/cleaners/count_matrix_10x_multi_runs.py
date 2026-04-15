@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import TextIO
 
@@ -114,7 +115,40 @@ def _triplet_dir(*, inp: dict, donor_id: str, sample_id: str, run_id: str) -> Pa
     return Path(resolved)
 
 
-def run_count_matrix_10x_multi_runs(*, study: str, study_spec: dict, output_h5ad: Path, log: TextIO) -> None:
+def _resolve_workers(*, workers: int, n_runs: int) -> int:
+    if n_runs <= 1:
+        return 1
+    return max(1, min(int(workers), int(n_runs)))
+
+
+def _run_one_count_matrix_task(task: dict[str, str]) -> dict[str, str]:
+    run_spec = {
+        "input": {
+            "matrix": task["matrix"],
+            "genes": task["genes"],
+            "barcodes": task["barcodes"],
+        }
+    }
+    run_log_path = Path(task["run_log"])
+    run_log_path.parent.mkdir(parents=True, exist_ok=True)
+    with run_log_path.open("w", encoding="utf-8") as run_log:
+        run_count_matrix_10x(
+            study=task["study_run"],
+            study_spec=run_spec,
+            output_h5ad=Path(task["run_h5ad"]),
+            log=run_log,
+        )
+    return {"sample_id": task["run_id"], "h5ad": task["run_h5ad"]}
+
+
+def run_count_matrix_10x_multi_runs(
+    *,
+    study: str,
+    study_spec: dict,
+    output_h5ad: Path,
+    workers: int = 1,
+    log: TextIO,
+) -> None:
     inp = study_spec.setdefault("input", {})
 
     run_df = _load_runs(study=study, inp=inp)
@@ -125,6 +159,7 @@ def run_count_matrix_10x_multi_runs(*, study: str, study_spec: dict, output_h5ad
     tmp_dir.mkdir(parents=True, exist_ok=True)
     per_run_samples: list[dict[str, str]] = []
 
+    tasks: list[dict[str, str]] = []
     for row in run_df.itertuples(index=False):
         triplet_dir = _triplet_dir(
             inp=inp,
@@ -137,27 +172,30 @@ def run_count_matrix_10x_multi_runs(*, study: str, study_spec: dict, output_h5ad
         barcodes = triplet_dir / "barcodes.tsv.gz"
         run_h5ad = tmp_dir / f"{row.run_id}.h5ad"
 
-        run_spec = {
-            "input": {
-                "matrix": str(matrix),
-                "genes": str(genes),
-                "barcodes": str(barcodes),
-            }
-        }
-
         log_line(
             log,
             f"[{study}] Standardizing run_id={row.run_id} donor_id={row.donor_id} "
             f"sample_id={row.sample_id} from {triplet_dir}",
         )
-
-        run_count_matrix_10x(
-            study=f"{study}:{row.run_id}",
-            study_spec=run_spec,
-            output_h5ad=run_h5ad,
-            log=log,
+        tasks.append(
+            {
+                "run_id": str(row.run_id),
+                "study_run": f"{study}:{row.run_id}",
+                "matrix": str(matrix),
+                "genes": str(genes),
+                "barcodes": str(barcodes),
+                "run_h5ad": str(run_h5ad),
+                "run_log": str(output_h5ad.parent / "_per_run_h5ad" / f"{row.run_id}.standardize.log"),
+            }
         )
-        per_run_samples.append({"sample_id": row.run_id, "h5ad": str(run_h5ad)})
+
+    effective_workers = _resolve_workers(workers=workers, n_runs=len(tasks))
+    log_line(log, f"[{study}] count_matrix_10x_multi_runs workers={effective_workers}")
+    if effective_workers == 1:
+        per_run_samples = [_run_one_count_matrix_task(task) for task in tasks]
+    else:
+        with ProcessPoolExecutor(max_workers=effective_workers) as pool:
+            per_run_samples = list(pool.map(_run_one_count_matrix_task, tasks))
 
     inp["samples"] = per_run_samples
 

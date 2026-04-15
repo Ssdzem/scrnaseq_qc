@@ -1,6 +1,9 @@
 study: "HRA007511"
 
 input:
+  # Optional module-local worker override for standardize step.
+  # (Can also be set globally via env var A1_P1_STANDARDIZE_WORKERS)
+  # workers: 8
   runs_csv: "config/liver_scRNAseq_metadata_everything.csv"
   triplet_root: "out/HRA007511/counts/singleton/run"
   triplet_layout: "{triplet_root}/{donor_id}/{sample_id}/{run_id}/shell/{run_id}/outs/filtered"
