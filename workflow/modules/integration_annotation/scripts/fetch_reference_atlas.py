@@ -234,6 +234,8 @@ def build_reference_anndata(full_cfg: dict, output_h5ad: str) -> tuple[object, d
     _ensure_scanpy_compatible_features(triplet_dir)
     var_names_mode = _choose_var_names_mode(triplet_dir)
     adata = sc.read_10x_mtx(str(triplet_dir), var_names=var_names_mode, make_unique=True)
+    # Keep immutable raw counts available throughout downstream preprocessing.
+    adata.layers["counts"] = adata.X.copy()
 
     md = pd.read_csv(metadata_path)
     if metadata_join_key not in md.columns:
@@ -251,8 +253,11 @@ def build_reference_anndata(full_cfg: dict, output_h5ad: str) -> tuple[object, d
     md = md[~md.index.duplicated(keep="first")]
 
     adata.obs = adata.obs.join(md, on="__barcode_norm", how="left")
-    adata = adata[adata.obs["annot"].notna()].copy()
+    adata = adata[adata.obs[metadata_label_col].notna()].copy()
+    adata.X = adata.layers["counts"].copy()
     adata = _prepare_symphony_reference(adata, full_cfg)
+    # Ensure primary matrix remains raw counts in final reference output.
+    adata.X = adata.layers["counts"].copy()
 
     adata.uns.setdefault("integration_annotation", {})
     adata.uns["integration_annotation"]["reference_atlas"] = {
@@ -261,6 +266,7 @@ def build_reference_anndata(full_cfg: dict, output_h5ad: str) -> tuple[object, d
         "matrix_subdir": matrix_subdir,
         "metadata_join_key": metadata_join_key,
         "metadata_label_col": metadata_label_col,
+        "counts_layer": "counts",
         "n_cells": int(adata.n_obs),
         "n_genes": int(adata.n_vars),
         "n_cells_with_label": int(adata.obs[metadata_label_col].notna().sum()),
@@ -273,6 +279,7 @@ def build_reference_anndata(full_cfg: dict, output_h5ad: str) -> tuple[object, d
         "n_cells": int(adata.n_obs),
         "n_genes": int(adata.n_vars),
         "label_column": metadata_label_col,
+        "counts_layer": "counts",
         "n_cells_with_label": int(adata.obs[metadata_label_col].notna().sum()),
     }
     return adata, report
