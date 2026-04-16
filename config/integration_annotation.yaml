@@ -34,10 +34,17 @@ annotation:
     # Batch key and optional counts layer used for SCVI/SCANVI setup.
     batch_key: "sample_id"
     counts_layer: "counts"
+    # Compute backend. Set use_gpu: false to force CPU execution.
+    use_gpu: true
+    # Optional explicit override: "cpu" or "gpu". Leave empty to use use_gpu.
+    accelerator: ""
     # Training settings.
     scvi_max_epochs: 100
     scanvi_max_epochs: 30
+    query_finetune_max_epochs: 20
     n_latent: 30
+    batch_size: 8192
+    min_shared_genes: 2000
     seed: 0
 
 evaluation:

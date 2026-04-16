@@ -1,5 +1,6 @@
 import argparse
 import logging
+import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -120,99 +121,154 @@ def _annotate_with_symphony(adata_query, cfg: dict, target_col: str, unknown_lab
     return adata_query
 
 
+def _resolve_accelerator(cfg: dict) -> tuple[str, bool]:
+    accelerator_raw = str(cfg.get("accelerator", "")).strip().lower()
+    use_gpu_raw = cfg.get("use_gpu", None)
+
+    if accelerator_raw in {"cpu", "gpu"}:
+        return accelerator_raw, accelerator_raw == "gpu"
+
+    if use_gpu_raw is None:
+        # default to cpu for portability
+        return "cpu", False
+
+    if isinstance(use_gpu_raw, bool):
+        return ("gpu", True) if use_gpu_raw else ("cpu", False)
+
+    use_gpu = str(use_gpu_raw).strip().lower() in {"1", "true", "yes", "y", "gpu"}
+    return ("gpu", True) if use_gpu else ("cpu", False)
+
+
 def _annotate_with_scanvi(adata_query, cfg: dict, target_col: str, unknown_label: str):
     import scvi
+    from scipy import sparse
+    import torch
 
     reference_path = str(cfg.get("reference_h5ad", "")).strip()
     if not reference_path:
         raise ValueError("annotation.scanvi.reference_h5ad must be set for method=scanvi")
 
     reference_label_key = str(cfg.get("reference_label_key", "cell_type")).strip()
-    batch_key = str(cfg.get("batch_key", "sample_id")).strip()
+    batch_key = str(cfg.get("batch_key", "")).strip()
     counts_layer = str(cfg.get("counts_layer", "counts")).strip()
     scvi_max_epochs = int(cfg.get("scvi_max_epochs", 100))
     scanvi_max_epochs = int(cfg.get("scanvi_max_epochs", 30))
+    query_finetune_max_epochs = int(cfg.get("query_finetune_max_epochs", 20))
     n_latent = int(cfg.get("n_latent", 30))
     seed = int(cfg.get("seed", 0))
+    batch_size = int(cfg.get("batch_size", 8192))
+    min_shared_genes = int(cfg.get("min_shared_genes", 2000))
+
+    accelerator, use_gpu_requested = _resolve_accelerator(cfg)
+    if accelerator == "gpu" and not torch.cuda.is_available():
+        logging.warning("SCANVI configured with GPU but CUDA is unavailable; falling back to CPU")
+        accelerator = "cpu"
+
+    torch.set_float32_matmul_precision("medium")
+    scvi.settings.seed = seed
+    scvi.settings.dl_num_workers = 0
+    scvi.settings.dl_persistent_workers = False
 
     adata_ref = sc.read_h5ad(reference_path)
     if reference_label_key not in adata_ref.obs.columns:
         raise ValueError(f"Reference label key not found in atlas: {reference_label_key}")
 
-    adata_ref = adata_ref.copy()
+    adata_ref = adata_ref[adata_ref.obs[reference_label_key].notna()].copy()
+    adata_ref.obs[reference_label_key] = _safe_obs_str(adata_ref.obs[reference_label_key], unknown_label)
     adata_query = adata_query.copy()
-    adata_ref.obs["__orig_obs_name"] = adata_ref.obs_names.astype(str)
-    adata_query.obs["__orig_obs_name"] = adata_query.obs_names.astype(str)
 
-    if batch_key and batch_key not in adata_ref.obs.columns:
-        adata_ref.obs[batch_key] = "reference_batch"
-    if batch_key and batch_key not in adata_query.obs.columns:
-        adata_query.obs[batch_key] = "query_batch"
+    adata_ref.var_names_make_unique()
+    adata_query.var_names_make_unique()
 
-    train_label_key = "__scanvi_train_labels"
-    source_key = "__scanvi_source"
-    adata_ref.obs[train_label_key] = _safe_obs_str(adata_ref.obs[reference_label_key], unknown_label)
-    adata_query.obs[train_label_key] = unknown_label
+    if counts_layer:
+        if counts_layer in adata_ref.layers:
+            adata_ref.X = adata_ref.layers[counts_layer].copy()
+        if counts_layer in adata_query.layers:
+            adata_query.X = adata_query.layers[counts_layer].copy()
+        elif counts_layer != "X":
+            raise ValueError(f"Counts layer {counts_layer!r} not found in query AnnData layers")
 
-    adata_joint = sc.concat(
-        [adata_ref, adata_query],
-        label=source_key,
-        keys=["reference", "query"],
-        join="inner",
-        index_unique="-",
-        merge="same",
+    common = adata_ref.var_names.intersection(adata_query.var_names)
+    if len(common) < min_shared_genes:
+        raise ValueError(
+            f"Too few overlapping genes between reference and query ({len(common)} < {min_shared_genes})"
+        )
+    adata_ref = adata_ref[:, common].copy()
+    adata_query = adata_query[:, common].copy()
+
+    if sparse.issparse(adata_ref.X):
+        adata_ref.X = adata_ref.X.tocsr()
+    if sparse.issparse(adata_query.X):
+        adata_query.X = adata_query.X.tocsr()
+
+    setup_kwargs = {"labels_key": reference_label_key}
+    if batch_key:
+        if batch_key not in adata_ref.obs.columns:
+            adata_ref.obs[batch_key] = "reference_batch"
+        if batch_key not in adata_query.obs.columns:
+            adata_query.obs[batch_key] = "query_batch"
+        setup_kwargs["batch_key"] = batch_key
+
+    scvi.model.SCVI.setup_anndata(adata_ref, **setup_kwargs)
+    scvi_model = scvi.model.SCVI(
+        adata_ref,
+        n_layers=2,
+        n_latent=n_latent,
+        gene_likelihood="nb",
     )
-    if adata_joint.n_vars == 0:
-        raise ValueError("No overlapping genes between query and scanvi reference atlas")
-
-    layer = counts_layer if counts_layer and counts_layer in adata_joint.layers else None
-    scvi.settings.seed = seed
-    scvi.model.SCVI.setup_anndata(adata_joint, batch_key=batch_key or None, labels_key=train_label_key, layer=layer)
-    scvi_model = scvi.model.SCVI(adata_joint, n_latent=n_latent)
-    scvi_model.train(max_epochs=scvi_max_epochs)
+    scvi_model.train(
+        max_epochs=scvi_max_epochs,
+        accelerator=accelerator,
+        devices=1,
+        batch_size=batch_size,
+    )
 
     scanvi_model = scvi.model.SCANVI.from_scvi_model(
         scvi_model,
-        labels_key=train_label_key,
+        adata=adata_ref,
+        labels_key=reference_label_key,
         unlabeled_category=unknown_label,
     )
-    scanvi_model.train(max_epochs=scanvi_max_epochs)
-
-    pred = scanvi_model.predict(adata_joint)
-    pred_series = pd.Series(pred, index=adata_joint.obs_names)
-    try:
-        pred_soft = scanvi_model.predict(adata_joint, soft=True)
-        if isinstance(pred_soft, pd.DataFrame):
-            pred_soft_df = pred_soft.copy()
-        else:
-            pred_soft_df = pd.DataFrame(pred_soft, index=adata_joint.obs_names)
-    except Exception as exc:
-        logging.warning("Could not compute SCANVI soft predictions: %s", exc)
-        pred_soft_df = pd.DataFrame(index=adata_joint.obs_names)
-
-    try:
-        latent_joint = scanvi_model.get_latent_representation(adata_joint)
-    except Exception as exc:
-        logging.warning("Could not extract SCANVI latent representation: %s", exc)
-        latent_joint = None
-
-    query_mask = adata_joint.obs[source_key].eq("query")
-    pred_table = pd.DataFrame(
-        {
-            "orig_obs_name": adata_joint.obs.loc[query_mask, "__orig_obs_name"].astype(str).values,
-            "pred_label": pred_series.loc[query_mask].astype(str).values,
-        }
+    scanvi_model.train(
+        max_epochs=scanvi_max_epochs,
+        accelerator=accelerator,
+        devices=1,
+        batch_size=batch_size,
     )
-    pred_map = pred_table.drop_duplicates(subset=["orig_obs_name"]).set_index("orig_obs_name")["pred_label"]
 
-    adata_query.obs[target_col] = unknown_label
-    adata_query.obs.loc[:, target_col] = adata_query.obs["__orig_obs_name"].map(pred_map).fillna(unknown_label).astype(str)
-    adata_query.obs[target_col] = _safe_obs_str(adata_query.obs[target_col], unknown_label)
+    with tempfile.TemporaryDirectory(prefix="scanvi_ref_model_") as model_dir:
+        scanvi_model.save(model_dir, overwrite=True)
+        scvi.model.SCANVI.prepare_query_anndata(adata_query, model_dir)
+        scanvi_query = scvi.model.SCANVI.load_query_data(adata_query, model_dir)
+
+        scanvi_query.train(
+            max_epochs=query_finetune_max_epochs,
+            accelerator=accelerator,
+            devices=1,
+            plan_kwargs=dict(weight_decay=0.0),
+            batch_size=batch_size,
+        )
+
+        pred = scanvi_query.predict(adata_query)
+        adata_query.obs[target_col] = _safe_obs_str(pd.Series(pred, index=adata_query.obs_names), unknown_label).values
+
+        try:
+            pred_soft = scanvi_query.predict(adata_query, soft=True)
+            if isinstance(pred_soft, pd.DataFrame):
+                pred_soft_df = pred_soft.copy()
+            else:
+                pred_soft_df = pd.DataFrame(pred_soft, index=adata_query.obs_names)
+        except Exception as exc:
+            logging.warning("Could not compute SCANVI soft predictions: %s", exc)
+            pred_soft_df = pd.DataFrame(index=adata_query.obs_names)
+
+        try:
+            adata_query.obsm["X_scanvi"] = scanvi_query.get_latent_representation(adata_query)
+        except Exception as exc:
+            logging.warning("Could not extract SCANVI latent representation: %s", exc)
 
     if not pred_soft_df.empty:
-        pred_soft_df = pred_soft_df.loc[query_mask]
-        pred_soft_df.index = adata_joint.obs.loc[query_mask, "__orig_obs_name"].astype(str).values
-        pred_soft_df = pred_soft_df.reindex(adata_query.obs["__orig_obs_name"].astype(str).values)
+        pred_soft_df = pred_soft_df.reindex(adata_query.obs_names)
         probs = pred_soft_df.to_numpy(dtype=float, copy=True)
         probs = np.clip(probs, 1e-12, 1.0)
         row_sums = probs.sum(axis=1, keepdims=True)
@@ -225,15 +281,12 @@ def _annotate_with_scanvi(adata_query, cfg: dict, target_col: str, unknown_label
             margin = top2[:, 1] - top2[:, 0]
         else:
             margin = np.ones(probs.shape[0], dtype=float)
-        adata_query.obs["scanvi_pred_confidence"] = conf
-        adata_query.obs["scanvi_pred_entropy"] = entropy
-        adata_query.obs["scanvi_pred_margin"] = margin
-        adata_query.obs["scanvi_pred_confidence"] = pd.to_numeric(adata_query.obs["scanvi_pred_confidence"], errors="coerce")
-        adata_query.obs["scanvi_pred_entropy"] = pd.to_numeric(adata_query.obs["scanvi_pred_entropy"], errors="coerce")
-        adata_query.obs["scanvi_pred_margin"] = pd.to_numeric(adata_query.obs["scanvi_pred_margin"], errors="coerce")
-    if latent_joint is not None:
-        latent_query = np.asarray(latent_joint)[query_mask.to_numpy(), :]
-        adata_query.obsm["X_scanvi"] = latent_query
+
+        adata_query.obs["scanvi_pred_confidence"] = pd.to_numeric(conf, errors="coerce")
+        adata_query.obs["scanvi_pred_entropy"] = pd.to_numeric(entropy, errors="coerce")
+        adata_query.obs["scanvi_pred_margin"] = pd.to_numeric(margin, errors="coerce")
+        adata_query.obsm["scanvi_pred_proba"] = probs
+        adata_query.uns["scanvi_pred_proba_columns"] = [str(c) for c in pred_soft_df.columns]
 
     adata_query.uns.setdefault("integration_annotation", {})
     conf_series = (
@@ -255,14 +308,19 @@ def _annotate_with_scanvi(adata_query, cfg: dict, target_col: str, unknown_label
         "reference_h5ad": reference_path,
         "reference_label_key": reference_label_key,
         "batch_key": batch_key,
-        "counts_layer": layer or "X",
+        "counts_layer": counts_layer or "X",
+        "accelerator": accelerator,
+        "use_gpu_requested": bool(use_gpu_requested),
         "scvi_max_epochs": scvi_max_epochs,
         "scanvi_max_epochs": scanvi_max_epochs,
+        "query_finetune_max_epochs": query_finetune_max_epochs,
+        "batch_size": batch_size,
         "n_latent": n_latent,
         "seed": seed,
+        "min_shared_genes": min_shared_genes,
         "n_reference_cells": int(adata_ref.n_obs),
         "n_query_cells": int(adata_query.n_obs),
-        "n_shared_genes": int(adata_joint.n_vars),
+        "n_shared_genes": int(len(common)),
         "embedding_key": "X_scanvi" if "X_scanvi" in adata_query.obsm else "",
         "mapping_score_analog": {
             "confidence_key": "scanvi_pred_confidence" if "scanvi_pred_confidence" in adata_query.obs.columns else "",
