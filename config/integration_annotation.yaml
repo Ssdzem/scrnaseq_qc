@@ -10,12 +10,12 @@ integration:
   n_neighbors: 15
   leiden_resolution: 1.0
   # scVI-specific training knobs.
-  scvi_max_epochs: 100
+  scvi_max_epochs: 400
   seed: 0
 
 annotation:
   # Strategy options: "from_existing_column", "from_leiden", "symphony", "scanvi", or fallback to Unknown.
-  method: "symphony"
+  method: "scanvi"
   # Only used when method="from_existing_column": copy labels from this obs column.
   source_column: "cell_type"
   # Output label column written for ALL methods (including symphony/scanvi predictions).
@@ -36,7 +36,7 @@ annotation:
     reference_label_key: "annot"
     # Reference-only batch covariate for SCVI/SCANVI setup (must exist in reference obs).
     # Leave empty to disable SCANVI batch covariates.
-    reference_batch_key: "sample_id"
+    reference_batch_key: "patient"
     # Optional query batch column to map into reference_batch_key during query adaptation.
     # Leave empty to avoid query-side batch correction metadata; query cells use one reference batch value.
     query_batch_key: ""
@@ -44,9 +44,9 @@ annotation:
     batch_key: ""
     counts_layer: "counts"
     # Compute backend. Set use_gpu: false to force CPU execution.
-    use_gpu: true
+    use_gpu: false
     # Optional explicit override: "cpu" or "gpu". Leave empty to use use_gpu.
-    accelerator: ""
+    accelerator: "cpu"
     # Training settings.
     scvi_max_epochs: 100
     scanvi_max_epochs: 30
