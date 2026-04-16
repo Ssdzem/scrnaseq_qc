@@ -149,7 +149,11 @@ def _annotate_with_scanvi(adata_query, cfg: dict, target_col: str, unknown_label
         raise ValueError("annotation.scanvi.reference_h5ad must be set for method=scanvi")
 
     reference_label_key = str(cfg.get("reference_label_key", "cell_type")).strip()
-    batch_key = str(cfg.get("batch_key", "")).strip()
+    reference_batch_key = str(cfg.get("reference_batch_key", "")).strip()
+    query_batch_key = str(cfg.get("query_batch_key", "")).strip()
+    legacy_batch_key = str(cfg.get("batch_key", "")).strip()
+    if not reference_batch_key and legacy_batch_key:
+        reference_batch_key = legacy_batch_key
     counts_layer = str(cfg.get("counts_layer", "counts")).strip()
     scvi_max_epochs = int(cfg.get("scvi_max_epochs", 100))
     scanvi_max_epochs = int(cfg.get("scanvi_max_epochs", 30))
@@ -202,12 +206,29 @@ def _annotate_with_scanvi(adata_query, cfg: dict, target_col: str, unknown_label
         adata_query.X = adata_query.X.tocsr()
 
     setup_kwargs = {"labels_key": reference_label_key}
-    if batch_key:
-        if batch_key not in adata_ref.obs.columns:
-            adata_ref.obs[batch_key] = "reference_batch"
-        if batch_key not in adata_query.obs.columns:
-            adata_query.obs[batch_key] = "query_batch"
-        setup_kwargs["batch_key"] = batch_key
+    if reference_batch_key:
+        if reference_batch_key not in adata_ref.obs.columns:
+            raise ValueError(
+                f"annotation.scanvi.reference_batch_key={reference_batch_key!r} is not present in reference obs"
+            )
+        adata_ref.obs[reference_batch_key] = _safe_obs_str(adata_ref.obs[reference_batch_key], "Unknown")
+        setup_kwargs["batch_key"] = reference_batch_key
+
+        if query_batch_key:
+            if query_batch_key not in adata_query.obs.columns:
+                raise ValueError(
+                    f"annotation.scanvi.query_batch_key={query_batch_key!r} is not present in query obs"
+                )
+            adata_query.obs[reference_batch_key] = _safe_obs_str(adata_query.obs[query_batch_key], "Unknown")
+        else:
+            ref_batches = pd.Series(adata_ref.obs[reference_batch_key], copy=False)
+            ref_non_na = ref_batches[ref_batches.notna()]
+            if ref_non_na.empty:
+                raise ValueError(
+                    "annotation.scanvi.reference_batch_key is set but reference batch column has no non-null values"
+                )
+            # Default query to a single existing reference batch to avoid forcing query-side batch correction metadata.
+            adata_query.obs[reference_batch_key] = str(ref_non_na.iloc[0])
 
     scvi.model.SCVI.setup_anndata(adata_ref, **setup_kwargs)
     scvi_model = scvi.model.SCVI(
@@ -307,7 +328,9 @@ def _annotate_with_scanvi(adata_query, cfg: dict, target_col: str, unknown_label
     adata_query.uns["integration_annotation"]["scanvi"] = {
         "reference_h5ad": reference_path,
         "reference_label_key": reference_label_key,
-        "batch_key": batch_key,
+        "reference_batch_key": reference_batch_key,
+        "query_batch_key": query_batch_key,
+        "legacy_batch_key": legacy_batch_key,
         "counts_layer": counts_layer or "X",
         "accelerator": accelerator,
         "use_gpu_requested": bool(use_gpu_requested),

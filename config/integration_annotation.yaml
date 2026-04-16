@@ -16,8 +16,11 @@ integration:
 annotation:
   # Strategy options: "from_existing_column", "from_leiden", "symphony", "scanvi", or fallback to Unknown.
   method: "symphony"
+  # Only used when method="from_existing_column": copy labels from this obs column.
   source_column: "cell_type"
+  # Output label column written for ALL methods (including symphony/scanvi predictions).
   target_column: "cell_type"
+  # Fallback label for missing/empty predictions or unmatched branches.
   unknown_label: "Unknown"
   symphony:
     # Reference atlas with precomputed PCA/harmony context suitable for Symphony mapping.
@@ -31,8 +34,14 @@ annotation:
     # Reference atlas containing known labels for semi-supervised transfer.
     reference_h5ad: "data/ref/lca_human_reference.h5ad"
     reference_label_key: "annot"
-    # Batch key and optional counts layer used for SCVI/SCANVI setup.
-    batch_key: "sample_id"
+    # Reference-only batch covariate for SCVI/SCANVI setup (must exist in reference obs).
+    # Leave empty to disable SCANVI batch covariates.
+    reference_batch_key: "sample_id"
+    # Optional query batch column to map into reference_batch_key during query adaptation.
+    # Leave empty to avoid query-side batch correction metadata; query cells use one reference batch value.
+    query_batch_key: ""
+    # Deprecated alias for reference_batch_key (kept for backward compatibility).
+    batch_key: ""
     counts_layer: "counts"
     # Compute backend. Set use_gpu: false to force CPU execution.
     use_gpu: true
