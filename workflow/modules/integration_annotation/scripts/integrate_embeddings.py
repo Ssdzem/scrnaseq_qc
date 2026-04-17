@@ -36,6 +36,24 @@ def ensure_obs_key(adata, key: str, fallback_value: str):
         adata.obs[key] = fallback_value
 
 
+def resolve_accelerator(cfg: dict) -> tuple[str, bool]:
+    accelerator_raw = str(cfg.get("accelerator", "")).strip().lower()
+    use_gpu_raw = cfg.get("use_gpu", None)
+
+    if accelerator_raw in {"cpu", "gpu"}:
+        return accelerator_raw, accelerator_raw == "gpu"
+
+    if use_gpu_raw is None:
+        # Default to CPU for portability.
+        return "cpu", False
+
+    if isinstance(use_gpu_raw, bool):
+        return ("gpu", True) if use_gpu_raw else ("cpu", False)
+
+    use_gpu = str(use_gpu_raw).strip().lower() in {"1", "true", "yes", "y", "gpu"}
+    return ("gpu", True) if use_gpu else ("cpu", False)
+
+
 def run_integration(adata, cfg: dict, scope_label: str):
     integration_method = str(cfg.get("method", cfg.get("integration_method", "scvi"))).strip().lower()
     do_integration = bool(cfg.get("enabled", True))
@@ -45,6 +63,9 @@ def run_integration(adata, cfg: dict, scope_label: str):
     leiden_resolution = float(cfg.get("leiden_resolution", 1.0))
     scvi_batch_key = str(cfg.get("batch_key", "sample_id"))
     scvi_max_epochs = int(cfg.get("scvi_max_epochs", 100))
+    scvi_cpu_num_workers = int(cfg.get("scvi_cpu_num_workers", 8))
+    scvi_cpu_num_threads = int(cfg.get("scvi_cpu_num_threads", 16))
+    scvi_cpu_persistent_workers = bool(cfg.get("scvi_cpu_persistent_workers", True))
     seed = int(cfg.get("seed", 0))
     np.random.seed(seed)
 
@@ -68,12 +89,23 @@ def run_integration(adata, cfg: dict, scope_label: str):
 
     if do_integration and integration_method == "scvi":
         import scvi
+        import torch
+
+        accelerator, use_gpu_requested = resolve_accelerator(cfg)
+        if accelerator == "gpu" and not torch.cuda.is_available():
+            logging.warning("Integration configured with GPU but CUDA is unavailable; falling back to CPU")
+            accelerator = "cpu"
 
         scvi.settings.seed = seed
+        if accelerator == "cpu":
+            scvi.settings.dl_num_workers = scvi_cpu_num_workers
+            scvi.settings.num_threads = scvi_cpu_num_threads
+            scvi.settings.dl_persistent_workers = scvi_cpu_persistent_workers
+
         layer_for_scvi = "counts" if "counts" in adata_hvg.layers else None
         scvi.model.SCVI.setup_anndata(adata_hvg, layer=layer_for_scvi, batch_key=scvi_batch_key)
         model = scvi.model.SCVI(adata_hvg)
-        model.train(max_epochs=scvi_max_epochs)
+        model.train(max_epochs=scvi_max_epochs, accelerator=accelerator)
         adata_hvg.obsm["X_integrated"] = model.get_latent_representation()
         adata_hvg.obsm["X_scVI"] = adata_hvg.obsm["X_integrated"]
         cluster_key = "leiden_scvi"
@@ -117,6 +149,11 @@ def run_integration(adata, cfg: dict, scope_label: str):
         "leiden_resolution": leiden_resolution,
         "batch_key": scvi_batch_key,
         "scvi_max_epochs": scvi_max_epochs,
+        "accelerator": accelerator if do_integration and integration_method == "scvi" else "",
+        "use_gpu_requested": bool(use_gpu_requested) if do_integration and integration_method == "scvi" else False,
+        "scvi_cpu_num_workers": scvi_cpu_num_workers,
+        "scvi_cpu_num_threads": scvi_cpu_num_threads,
+        "scvi_cpu_persistent_workers": scvi_cpu_persistent_workers,
         "seed": seed,
         "scope": scope_label,
         "n_hvg_used": len(hvg_var_names),

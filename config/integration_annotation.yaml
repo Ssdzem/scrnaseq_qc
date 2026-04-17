@@ -10,7 +10,15 @@ integration:
   n_neighbors: 15
   leiden_resolution: 1.0
   # scVI-specific training knobs.
+  # Compute backend. Set use_gpu: true to request GPU execution.
+  use_gpu: false
+  # Optional explicit override: "cpu" or "gpu". Leave empty to use use_gpu.
+  accelerator: "cpu"
   scvi_max_epochs: 400
+  # CPU tuning knobs for scVI training (used when accelerator resolves to "cpu").
+  scvi_cpu_num_workers: 8
+  scvi_cpu_num_threads: 16
+  scvi_cpu_persistent_workers: true
   seed: 0
 
 annotation:
