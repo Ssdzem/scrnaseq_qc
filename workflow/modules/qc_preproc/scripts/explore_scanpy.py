@@ -70,7 +70,7 @@ def prepare_before_integration(adata, study: str, cfg: dict):
             layer="counts",
         )
         logging.info("Computed highly variable genes with flavor=seurat_v3")
-    except ImportError as exc:
+    except (ImportError, ValueError) as exc:
         logging.warning(
             "HVG with flavor=seurat_v3 failed (%s). Falling back to flavor=seurat.",
             exc,
