@@ -41,7 +41,7 @@ def build_rows_by_key(metadata_rows: list[dict[str, str]], key_column: str) -> d
         if key_value in rows_by_key:
             duplicate_keys.add(key_value)
             continue
-        rows_by_key[key_value] = {k: v for k, v in row.items() if k != key_column}
+        rows_by_key[key_value] = dict(row)
 
     if duplicate_keys:
         logging.warning(
