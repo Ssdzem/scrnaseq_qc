@@ -3,14 +3,37 @@ integration:
   enabled: true
   # Integration backend: "scvi" or "harmony".
   method: "scvi"
-  # Which obs key to use as batch for integration.
+  # Which obs key to use as the primary scVI batch for integration.
   batch_key: "study_accession"
+  # Additional obs keys to correct as categorical covariates in scVI.
+  categorical_covariate_keys:
+    - "assay"
+  continuous_covariate_keys: []
   # Embedding / graph parameters.
   n_pcs: 50
   n_neighbors: 15
   leiden_resolution: 1.0
+  # Skip PCA/UMAP for the million-cell scVI path unless explicitly needed.
+  compute_pca: false
+  compute_umap: false
+  compute_leiden: true
   # scVI-specific training knobs.
   scvi_max_epochs: 400
+  n_latent: 30
+  batch_size: 4096
+  validation_size: 0.1
+  check_val_every_n_epoch: 1
+  early_stopping: true
+  early_stopping_monitor: "elbo_validation"
+  early_stopping_patience: 20
+  dl_num_workers: 4
+  num_threads: 16
+  # GPU settings. Set use_gpu false to force CPU; require_gpu fails fast if CUDA is unavailable.
+  use_gpu: true
+  require_gpu: true
+  accelerator: "gpu"
+  devices: 1
+  float32_matmul_precision: "high"
   seed: 0
 
 annotation:

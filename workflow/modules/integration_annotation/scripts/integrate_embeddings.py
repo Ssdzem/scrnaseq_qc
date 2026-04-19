@@ -5,6 +5,7 @@ from pathlib import Path
 
 import anndata as ad
 import numpy as np
+import pandas as pd
 import scanpy as sc
 import yaml
 
@@ -36,6 +37,40 @@ def ensure_obs_key(adata, key: str, fallback_value: str):
         adata.obs[key] = fallback_value
 
 
+def _as_list(value) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        value = [value]
+    return [str(v).strip() for v in value if str(v).strip()]
+
+
+def _coerce_device_value(value):
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped.lower() == "auto":
+            return "auto"
+        try:
+            return int(stripped)
+        except ValueError:
+            return stripped
+    return value
+
+
+def _require_obs_keys(adata, keys: list[str]):
+    missing = [key for key in keys if key not in adata.obs.columns]
+    if missing:
+        raise ValueError(f"Required integration obs column(s) missing: {missing}")
+
+
+def _sanitize_categorical_obs(adata, keys: list[str], unknown_label: str = "Unknown"):
+    for key in keys:
+        series = adata.obs[key]
+        series = series.where(~series.isna(), other=unknown_label)
+        series = series.astype(str).replace({"": unknown_label, "nan": unknown_label, "None": unknown_label})
+        adata.obs[key] = pd.Categorical(series)
+
+
 def run_integration(adata, cfg: dict, scope_label: str):
     integration_method = str(cfg.get("method", cfg.get("integration_method", "scvi"))).strip().lower()
     do_integration = bool(cfg.get("enabled", True))
@@ -43,13 +78,33 @@ def run_integration(adata, cfg: dict, scope_label: str):
     n_pcs = int(cfg.get("n_pcs", 50))
     n_neighbors = int(cfg.get("n_neighbors", 15))
     leiden_resolution = float(cfg.get("leiden_resolution", 1.0))
+    compute_pca = bool(cfg.get("compute_pca", integration_method != "scvi" or not do_integration))
+    compute_umap = bool(cfg.get("compute_umap", False))
+    compute_leiden = bool(cfg.get("compute_leiden", True))
     scvi_batch_key = str(cfg.get("batch_key", "sample_id"))
+    categorical_covariate_keys = _as_list(cfg.get("categorical_covariate_keys", []))
+    continuous_covariate_keys = _as_list(cfg.get("continuous_covariate_keys", []))
+    batch_keys_for_reporting = [scvi_batch_key, *categorical_covariate_keys, *continuous_covariate_keys]
     scvi_max_epochs = int(cfg.get("scvi_max_epochs", 100))
+    n_latent = int(cfg.get("n_latent", 30))
+    batch_size = int(cfg.get("batch_size", 4096))
+    validation_size = float(cfg.get("validation_size", 0.1))
+    check_val_every_n_epoch = int(cfg.get("check_val_every_n_epoch", 1))
+    early_stopping = bool(cfg.get("early_stopping", True))
+    early_stopping_monitor = str(cfg.get("early_stopping_monitor", "elbo_validation"))
+    early_stopping_patience = int(cfg.get("early_stopping_patience", 20))
+    dl_num_workers = int(cfg.get("dl_num_workers", 4))
+    num_threads = int(cfg.get("num_threads", 16))
+    use_gpu = bool(cfg.get("use_gpu", False))
+    require_gpu = bool(cfg.get("require_gpu", False))
+    accelerator = str(cfg.get("accelerator", "gpu" if use_gpu else "cpu")).strip().lower()
+    devices = _coerce_device_value(cfg.get("devices", 1 if accelerator != "auto" else "auto"))
     seed = int(cfg.get("seed", 0))
     np.random.seed(seed)
 
     ensure_obs_key(adata, "sample_id", scope_label)
-    ensure_obs_key(adata, scvi_batch_key, scope_label)
+    _require_obs_keys(adata, batch_keys_for_reporting)
+    _sanitize_categorical_obs(adata, [scvi_batch_key, *categorical_covariate_keys])
 
     # Prefer the precomputed HVGs from qc_preproc; fallback to all vars.
     hvg_var_names = []
@@ -59,40 +114,73 @@ def run_integration(adata, cfg: dict, scope_label: str):
         hvg_var_names = adata.var_names.tolist()
 
     adata_hvg = adata[:, hvg_var_names].copy()
-    adata_hvg.layers["log1p"] = adata_hvg.X.copy()
+    if "counts" in adata_hvg.layers:
+        layer_for_scvi = "counts"
+    else:
+        layer_for_scvi = None
+    if "log1p" not in adata_hvg.layers:
+        adata_hvg.layers["log1p"] = adata_hvg.X.copy()
 
-    sc.pp.scale(adata_hvg, max_value=10)
-    adata_hvg.layers["scaled"] = adata_hvg.X.copy()
-
-    sc.tl.pca(adata_hvg, n_comps=n_pcs, svd_solver="arpack")
+    if compute_pca or integration_method in {"harmony", "none"}:
+        pca_source = adata_hvg.copy()
+        sc.pp.scale(pca_source, max_value=10)
+        sc.tl.pca(pca_source, n_comps=n_pcs, svd_solver="arpack")
+        adata_hvg.obsm["X_pca"] = pca_source.obsm["X_pca"]
+        adata_hvg.uns["pca"] = pca_source.uns["pca"]
+        adata_hvg.varm["PCs"] = pca_source.varm["PCs"]
 
     if do_integration and integration_method == "scvi":
         import scvi
+        import torch
 
         scvi.settings.seed = seed
-        layer_for_scvi = "counts" if "counts" in adata_hvg.layers else None
-        scvi.model.SCVI.setup_anndata(adata_hvg, layer=layer_for_scvi, batch_key=scvi_batch_key)
-        model = scvi.model.SCVI(adata_hvg)
-        scvi.settings.dl_num_workers = 8
-        scvi.settings.num_threads = 16
-        scvi.settings.dl_persistent_workers = True
+        if hasattr(torch, "set_float32_matmul_precision"):
+            torch.set_float32_matmul_precision(str(cfg.get("float32_matmul_precision", "high")))
+        cuda_available = bool(torch.cuda.is_available())
+        if require_gpu and accelerator == "gpu" and not cuda_available:
+            raise RuntimeError("integration.require_gpu=true but torch.cuda.is_available() is false")
+
+        scvi.model.SCVI.setup_anndata(
+            adata_hvg,
+            layer=layer_for_scvi,
+            batch_key=scvi_batch_key,
+            categorical_covariate_keys=categorical_covariate_keys or None,
+            continuous_covariate_keys=continuous_covariate_keys or None,
+        )
+        model = scvi.model.SCVI(adata_hvg, n_latent=n_latent)
+        scvi.settings.dl_num_workers = dl_num_workers
+        scvi.settings.num_threads = num_threads
+        scvi.settings.dl_persistent_workers = dl_num_workers > 0
+        logging.info(
+            "Training scVI: batch_key=%s categorical_covariates=%s layer=%s accelerator=%s devices=%s "
+            "cuda_available=%s batch_size=%d max_epochs=%d",
+            scvi_batch_key,
+            categorical_covariate_keys,
+            layer_for_scvi or "X",
+            accelerator,
+            devices,
+            cuda_available,
+            batch_size,
+            scvi_max_epochs,
+        )
         model.train(
-          max_epochs=400,
-          validation_size=0.1,
-          accelerator="cpu",
-          devices=1,
-          check_val_every_n_epoch=1,
-          early_stopping=True,
-          early_stopping_monitor="elbo_validation",
-          early_stopping_patience=20,
-        ) 
+            max_epochs=scvi_max_epochs,
+            validation_size=validation_size,
+            accelerator=accelerator,
+            devices=devices,
+            batch_size=batch_size,
+            check_val_every_n_epoch=check_val_every_n_epoch,
+            early_stopping=early_stopping,
+            early_stopping_monitor=early_stopping_monitor,
+            early_stopping_patience=early_stopping_patience,
+        )
         adata_hvg.obsm["X_integrated"] = model.get_latent_representation()
         adata_hvg.obsm["X_scVI"] = adata_hvg.obsm["X_integrated"]
         cluster_key = "leiden_scvi"
     elif do_integration and integration_method == "harmony":
         import harmonypy as hm
 
-        ho = hm.run_harmony(adata_hvg.obsm["X_pca"], adata_hvg.obs, [scvi_batch_key])
+        ho = hm.run_harmony(adata_hvg.obsm["X_pca"], adata_hvg.obs, [scvi_batch_key, *categorical_covariate_keys])
         z_corr = np.asarray(ho.Z_corr)
         if z_corr.shape == (n_pcs, adata_hvg.n_obs):
             z_corr = z_corr.T
@@ -106,19 +194,25 @@ def run_integration(adata, cfg: dict, scope_label: str):
         integration_method = "none"
         cluster_key = "leiden_pca"
 
-    sc.pp.neighbors(adata_hvg, use_rep="X_integrated", n_neighbors=n_neighbors)
-    sc.tl.umap(adata_hvg)
-    sc.tl.leiden(adata_hvg, key_added=cluster_key, resolution=leiden_resolution)
+    if compute_leiden or compute_umap:
+        sc.pp.neighbors(adata_hvg, use_rep="X_integrated", n_neighbors=n_neighbors)
+    if compute_umap:
+        sc.tl.umap(adata_hvg)
+    if compute_leiden:
+        sc.tl.leiden(adata_hvg, key_added=cluster_key, resolution=leiden_resolution)
 
-    adata.obsm["X_pca"] = adata_hvg.obsm["X_pca"]
+    if "X_pca" in adata_hvg.obsm:
+        adata.obsm["X_pca"] = adata_hvg.obsm["X_pca"]
     adata.obsm["X_integrated"] = adata_hvg.obsm["X_integrated"]
     if "X_scVI" in adata_hvg.obsm:
         adata.obsm["X_scVI"] = adata_hvg.obsm["X_scVI"]
     if "X_harmony" in adata_hvg.obsm:
         adata.obsm["X_harmony"] = adata_hvg.obsm["X_harmony"]
-    adata.obsm["X_umap"] = adata_hvg.obsm["X_umap"]
-    adata.obs["leiden"] = adata_hvg.obs[cluster_key].astype(str).reindex(adata.obs_names)
-    adata.obs[cluster_key] = adata.obs["leiden"]
+    if "X_umap" in adata_hvg.obsm:
+        adata.obsm["X_umap"] = adata_hvg.obsm["X_umap"]
+    if compute_leiden and cluster_key in adata_hvg.obs.columns:
+        adata.obs["leiden"] = adata_hvg.obs[cluster_key].astype(str).reindex(adata.obs_names)
+        adata.obs[cluster_key] = adata.obs["leiden"]
 
     adata.uns.setdefault("integration_annotation", {})
     adata.uns["integration_annotation"]["integration"] = {
@@ -127,8 +221,20 @@ def run_integration(adata, cfg: dict, scope_label: str):
         "n_pcs": n_pcs,
         "n_neighbors": n_neighbors,
         "leiden_resolution": leiden_resolution,
+        "compute_pca": compute_pca,
+        "compute_umap": compute_umap,
+        "compute_leiden": compute_leiden,
         "batch_key": scvi_batch_key,
+        "categorical_covariate_keys": categorical_covariate_keys,
+        "continuous_covariate_keys": continuous_covariate_keys,
         "scvi_max_epochs": scvi_max_epochs,
+        "n_latent": n_latent,
+        "batch_size": batch_size,
+        "use_gpu": use_gpu,
+        "require_gpu": require_gpu,
+        "accelerator": accelerator,
+        "devices": devices,
+        "layer": layer_for_scvi or "X",
         "seed": seed,
         "scope": scope_label,
         "n_hvg_used": len(hvg_var_names),
