@@ -4,6 +4,7 @@ configfile: "config/integration_annotation.yaml"
 
 include: "rules/common.smk"
 include: "rules/integrate.smk"
+include: "rules/reference_atlas.smk"
 include: "rules/annotate.smk"
 include: "rules/evaluate.smk"
 include: "rules/finalize.smk"
