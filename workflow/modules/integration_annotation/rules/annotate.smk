@@ -8,6 +8,8 @@ rule ia_annotate_all:
         annotated="out/integration_annotation/all_studies/all_annotated.h5ad",
         summary="out/integration_annotation/all_studies/annotation_summary.csv",
         done=touch("out/integration_annotation/all_studies/.annotated_done"),
+    params:
+        reference_h5ad=IA_REFERENCE_H5AD,
     log:
         _ia_log("all_studies")
     conda:
@@ -19,6 +21,7 @@ rule ia_annotate_all:
           --scope all_studies \
           --input {input.integrated} \
           --config {input.ia_config} \
+          --reference-h5ad {params.reference_h5ad} \
           --output {output.annotated} \
           --summary {output.summary} \
           --log {log}
@@ -37,6 +40,7 @@ rule ia_annotate_study:
         done=touch("out/integration_annotation/{study}/.annotated_done"),
     params:
         study=lambda wc: wc.study,
+        reference_h5ad=IA_REFERENCE_H5AD,
     log:
         _ia_log("{study}")
     conda:
@@ -49,6 +53,7 @@ rule ia_annotate_study:
           --study {params.study} \
           --input {input.integrated} \
           --config {input.ia_config} \
+          --reference-h5ad {params.reference_h5ad} \
           --output {output.annotated} \
           --summary {output.summary} \
           --log {log}

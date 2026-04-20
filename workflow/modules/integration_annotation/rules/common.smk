@@ -20,15 +20,12 @@ IA_REFERENCE_CFG = IA_FULL_CFG.get("reference_atlas", {}) if isinstance(IA_FULL_
 
 
 def _ia_reference_h5ad() -> str:
-    method = str(IA_ANNOTATION_CFG.get("method", "")).strip().lower()
-    if method == "symphony":
-        return str(IA_ANNOTATION_CFG.get("symphony", {}).get("reference_h5ad", "")).strip()
-    if method == "scanvi":
-        return str(IA_ANNOTATION_CFG.get("scanvi", {}).get("reference_h5ad", "")).strip()
-    return ""
+    # The integration_annotation module intentionally uses the bundled Liver Cell Atlas build target.
+    # Annotation scripts receive this resolved path from Snakemake instead of accepting arbitrary atlas paths.
+    return "data/ref/lca_human_reference.h5ad"
 
 
-IA_REFERENCE_H5AD = _ia_reference_h5ad() or "data/ref/lca_human_reference.h5ad"
+IA_REFERENCE_H5AD = _ia_reference_h5ad()
 
 
 def _ia_reference_targets(_wildcards=None):
@@ -62,6 +59,20 @@ def _studies_to_process():
         return sorted(studies_set)
     except FileNotFoundError:
         return []
+
+
+def _ia_integration_method(_wildcards=None) -> str:
+    integration_cfg = IA_FULL_CFG.get("integration", {}) if isinstance(IA_FULL_CFG, dict) else {}
+    if not bool(integration_cfg.get("enabled", True)):
+        return "none"
+    method = str(integration_cfg.get("method", integration_cfg.get("integration_method", ""))).strip().lower()
+    valid = {"sysvi", "scvi", "harmony"}
+    if method not in valid:
+        raise ValueError(
+            "config/integration_annotation.yaml requires integration.method to be set before running "
+            f"integration_annotation. Choose one of {sorted(valid)}; found {method!r}."
+        )
+    return method
 
 
 def _ia_log(study: str) -> str:

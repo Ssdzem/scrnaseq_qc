@@ -149,9 +149,20 @@ def compute_scib_metrics(adata, cfg: dict, batch_key: str, label_key: str) -> di
     return out
 
 
+def _resolve_label_key(adata, cfg: dict) -> str:
+    configured = str(cfg.get("label_key", "")).strip()
+    if configured:
+        return configured
+    ann_meta = adata.uns.get("integration_annotation", {}).get("annotation", {})
+    target_col = str(ann_meta.get("target_column", "")).strip()
+    if target_col:
+        return target_col
+    return "cell_type"
+
+
 def compute_metrics(adata, cfg: dict) -> dict:
-    batch_key = str(cfg.get("batch_key", "sample_id"))
-    label_key = str(cfg.get("label_key", "cell_type"))
+    batch_key = str(cfg.get("batch_key", "sample_id")).strip()
+    label_key = _resolve_label_key(adata, cfg)
     unknown_label = str(cfg.get("unknown_label", "Unknown"))
 
     metrics: dict[str, object] = {

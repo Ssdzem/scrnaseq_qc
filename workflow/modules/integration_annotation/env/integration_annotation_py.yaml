@@ -8,10 +8,13 @@ dependencies:
   - anndata>=0.12.5
   - pandas
   - numpy
+  - scipy
   - pyyaml
   - harmonypy
+  - scib
   - python-igraph
   - leidenalg
   - pip
   - pip:
       - "scvi-tools[cuda]>=1.3"
+      - "symphonypy>=0.2.1"

@@ -1,10 +1,18 @@
+reference_atlas:
+  # This module intentionally uses the bundled Liver Cell Atlas reference only.
+  enabled: true
+  cache_dir: "data/ref/cache"
+  extract_dir: "data/ref/rawData_human"
+  matrix_subdir: "countTable_human"
+  metadata_join_key: "cell"
+  metadata_label_col: "annot"
+
 integration:
   # Enable an integration backend. If false, uses PCA for graph/UMAP/Leiden.
   enabled: true
-<<<<<<< HEAD
-  # Integration backend: "scvi", "sysvi", or "harmony".
-  method: "sysvi"
-  # Primary batch/system key. For sysVI this is generated from system_key_components below.
+  # Required before execution. Choose exactly one: "sysvi", "scvi", or "harmony".
+  method: ""
+  # Primary batch/system key. For sysVI this can be generated from system_key_components below.
   batch_key: "sysvi_system"
   # Components used to build sysvi_system for strong cycle-consistency correction.
   system_key_components:
@@ -18,18 +26,11 @@ integration:
   continuous_covariate_keys: []
   # sysVI expects normalized log-expression; scVI defaults to counts when layer is omitted.
   layer: "log1p"
-=======
-  # Integration backend: "scvi" or "harmony".
-  method: "scvi"
-  # Which obs key to use as batch for integration.
-  batch_key: "study_accession"
->>>>>>> parent of 00fc3bc (feature:integration with gpu, succesful run)
   # Embedding / graph parameters.
   n_pcs: 50
   n_neighbors: 15
   leiden_resolution: 1.0
-<<<<<<< HEAD
-  # Skip PCA/UMAP for the million-cell scVI path unless explicitly needed.
+  # Large integrated runs can skip PCA/UMAP while still computing graph/Leiden on X_integrated.
   compute_pca: false
   compute_umap: false
   compute_leiden: true
@@ -65,59 +66,55 @@ integration:
   accelerator: "gpu"
   devices: 1
   float32_matmul_precision: "high"
-=======
-  # scVI-specific training knobs.
-  scvi_max_epochs: 400
->>>>>>> parent of 00fc3bc (feature:integration with gpu, succesful run)
   seed: 0
 
 annotation:
-  # Strategy options: "from_existing_column", "from_leiden", "symphony", "scanvi", or fallback to Unknown.
+  # Strategy options: "from_existing_column", "from_leiden", "symphony", or "scanvi".
   method: "from_existing_column"
   source_column: "cell_type"
-  target_column: "cell_type"
+  # Empty target_column writes to {annotation_method}_predicted_cell_type.
+  target_column: ""
   unknown_label: "Unknown"
   symphony:
-    # Reference atlas with precomputed PCA/harmony context suitable for Symphony mapping.
-    reference_h5ad: ""
-    # Label column in reference atlas to transfer to query cells.
+    # Reference h5ad is intentionally supplied by Snakemake as data/ref/lca_human_reference.h5ad.
     reference_label_key: "cell_type"
-    # Optional batch columns.
     reference_batch_key: "sample_id"
     query_batch_key: "sample_id"
     # k in kNN label transfer.
     k: 5
   scanvi:
-    # Reference atlas containing known labels for semi-supervised transfer.
-    reference_h5ad: ""
+    # Reference h5ad is intentionally supplied by Snakemake as data/ref/lca_human_reference.h5ad.
     reference_label_key: "cell_type"
-    # Batch key and optional counts layer used for SCVI/SCANVI setup.
-    batch_key: "sample_id"
+    reference_batch_key: "sample_id"
+    query_batch_key: "sample_id"
     counts_layer: "counts"
     # Training settings.
     scvi_max_epochs: 100
     scanvi_max_epochs: 30
+    query_finetune_max_epochs: 20
+    batch_size: 8192
     n_latent: 30
+    min_shared_genes: 2000
+    accelerator: "cpu"
     seed: 0
 
 evaluation:
-  # Keys used by the lightweight evaluator.
+  # Empty label_key uses integration_annotation.annotation.target_column from the annotated h5ad.
   batch_key: "sample_id"
-  label_key: "cell_type"
+  label_key: ""
   unknown_label: "Unknown"
-  # Extended benchmarking using scIB.
+  # Extended benchmarking using scIB. Keep enabled, but evaluator records per-embedding errors instead of aborting all output.
   scib:
     enabled: true
-    # Embeddings to benchmark if present in adata.obsm.
     embeddings:
       - "X_integrated"
       - "X_scVI"
+      - "X_sysVI"
       - "X_scanvi"
       - "X_symphony"
       - "X_harmony"
       - "X_pca_harmony"
       - "X_pca"
-    # scib.metrics.metrics options (set to true to include all metric families).
     ari: true
     nmi: true
     silhouette: true

@@ -150,8 +150,6 @@ def _prepare_symphony_reference(adata, full_cfg: dict):
     if method != "symphony":
         return adata
 
-    import symphonypy as sp
-
     sym_cfg = ann_cfg.get("symphony", {}) if isinstance(ann_cfg, dict) else {}
     target_sum = float(sym_cfg.get("target_sum", 1e5))
     n_top_genes = int(sym_cfg.get("n_top_genes", 3000))
@@ -254,6 +252,9 @@ def build_reference_anndata(full_cfg: dict, output_h5ad: str) -> tuple[object, d
 
     adata.obs = adata.obs.join(md, on="__barcode_norm", how="left")
     adata = adata[adata.obs[metadata_label_col].notna()].copy()
+    # Downstream annotation uses a stable hardcoded label key regardless of the source atlas metadata column.
+    if "cell_type" not in adata.obs.columns:
+        adata.obs["cell_type"] = adata.obs[metadata_label_col].astype(str)
     adata.X = adata.layers["counts"].copy()
     adata = _prepare_symphony_reference(adata, full_cfg)
     # Ensure primary matrix remains raw counts in final reference output.
@@ -266,6 +267,7 @@ def build_reference_anndata(full_cfg: dict, output_h5ad: str) -> tuple[object, d
         "matrix_subdir": matrix_subdir,
         "metadata_join_key": metadata_join_key,
         "metadata_label_col": metadata_label_col,
+        "reference_label_key": "cell_type",
         "counts_layer": "counts",
         "n_cells": int(adata.n_obs),
         "n_genes": int(adata.n_vars),
@@ -279,6 +281,7 @@ def build_reference_anndata(full_cfg: dict, output_h5ad: str) -> tuple[object, d
         "n_cells": int(adata.n_obs),
         "n_genes": int(adata.n_vars),
         "label_column": metadata_label_col,
+        "reference_label_key": "cell_type",
         "counts_layer": "counts",
         "n_cells_with_label": int(adata.obs[metadata_label_col].notna().sum()),
     }

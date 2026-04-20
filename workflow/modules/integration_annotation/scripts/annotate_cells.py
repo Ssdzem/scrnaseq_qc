@@ -9,6 +9,9 @@ import scanpy as sc
 import yaml
 
 
+REFERENCE_REQUIRED_METHODS = {"symphony", "scanvi"}
+
+
 def setup_logging(log_path: str | None):
     handlers: list[logging.Handler] = [logging.StreamHandler()]
     if log_path:
@@ -39,13 +42,45 @@ def _safe_obs_str(series: pd.Series, unknown_label: str) -> pd.Series:
     return out
 
 
-def _annotate_with_symphony(adata_query, cfg: dict, target_col: str, unknown_label: str):
+def _resolve_reference_path(method_cfg: dict, cli_reference_h5ad: str, method_name: str) -> str:
+    reference_path = str(cli_reference_h5ad or method_cfg.get("reference_h5ad", "")).strip()
+    if not reference_path:
+        raise ValueError(
+            f"annotation.{method_name}.reference_h5ad must be set or --reference-h5ad must be provided "
+            f"for method={method_name}"
+        )
+    return reference_path
+
+
+def _summary_for_numeric_obs(adata, column: str, direction: str) -> dict:
+    if column not in adata.obs.columns:
+        return {"available": False}
+    vals = pd.to_numeric(adata.obs[column], errors="coerce").dropna()
+    if vals.empty:
+        return {"available": False}
+    return {
+        "available": True,
+        "n_valid": int(vals.size),
+        "mean": float(vals.mean()),
+        "median": float(vals.median()),
+        "p90": float(vals.quantile(0.90)),
+        "p95": float(vals.quantile(0.95)),
+        "min": float(vals.min()),
+        "max": float(vals.max()),
+        "interpretation": direction,
+    }
+
+
+def _annotate_with_symphony(
+    adata_query,
+    cfg: dict,
+    target_col: str,
+    unknown_label: str,
+    reference_h5ad: str = "",
+):
     import symphonypy as sp
 
-    reference_path = str(cfg.get("reference_h5ad", "")).strip()
-    if not reference_path:
-        raise ValueError("annotation.symphony.reference_h5ad must be set for method=symphony")
-
+    reference_path = _resolve_reference_path(cfg, reference_h5ad, "symphony")
     reference_label_key = str(cfg.get("reference_label_key", "cell_type")).strip()
     reference_batch_key = str(cfg.get("reference_batch_key", "")).strip()
     query_batch_key = str(cfg.get("query_batch_key", "sample_id")).strip()
@@ -72,6 +107,7 @@ def _annotate_with_symphony(adata_query, cfg: dict, target_col: str, unknown_lab
         adata_query,
         adata_ref,
         reference_label_key,
+        symphony_k,
         query_labels=target_col,
     )
 
@@ -91,31 +127,17 @@ def _annotate_with_symphony(adata_query, cfg: dict, target_col: str, unknown_lab
     adata_query.obs[target_col] = _safe_obs_str(adata_query.obs[target_col], unknown_label)
     adata_query.uns.setdefault("integration_annotation", {})
     per_cell_col = "symphony_per_cell_dist"
-    if per_cell_col in adata_query.obs.columns:
-        vals = pd.to_numeric(adata_query.obs[per_cell_col], errors="coerce").dropna()
-        per_cell_summary = {
-            "n_valid": int(vals.size),
-            "mean": float(vals.mean()) if vals.size else None,
-            "median": float(vals.median()) if vals.size else None,
-            "p90": float(vals.quantile(0.90)) if vals.size else None,
-            "p95": float(vals.quantile(0.95)) if vals.size else None,
-            "min": float(vals.min()) if vals.size else None,
-            "max": float(vals.max()) if vals.size else None,
-            "interpretation": "lower_is_better",
-        }
-    else:
-        per_cell_summary = {"available": False}
-
     adata_query.uns["integration_annotation"]["symphony"] = {
         "reference_h5ad": reference_path,
         "reference_label_key": reference_label_key,
         "reference_batch_key": reference_batch_key,
         "query_batch_key": query_batch_key,
         "k": symphony_k,
+        "prediction_column": target_col,
         "embedding_key": "X_symphony" if "X_symphony" in adata_query.obsm else "",
         "per_cell_score_key": per_cell_col if per_cell_col in adata_query.obs.columns else "",
         "per_cluster_score_key": "symphony_per_cluster_dist" if "symphony_per_cluster_dist" in adata_query.uns else "",
-        "per_cell_summary": per_cell_summary,
+        "per_cell_summary": _summary_for_numeric_obs(adata_query, per_cell_col, "lower_is_better"),
     }
 
     return adata_query
@@ -139,15 +161,26 @@ def _resolve_accelerator(cfg: dict) -> tuple[str, bool]:
     return ("gpu", True) if use_gpu else ("cpu", False)
 
 
-def _annotate_with_scanvi(adata_query, cfg: dict, target_col: str, unknown_label: str):
+def _copy_layer_to_x(adata, counts_layer: str, role: str):
+    if not counts_layer or counts_layer == "X":
+        return
+    if counts_layer not in adata.layers:
+        raise ValueError(f"Counts layer {counts_layer!r} not found in {role} AnnData layers")
+    adata.X = adata.layers[counts_layer].copy()
+
+
+def _annotate_with_scanvi(
+    adata_query,
+    cfg: dict,
+    target_col: str,
+    unknown_label: str,
+    reference_h5ad: str = "",
+):
     import scvi
     from scipy import sparse
     import torch
 
-    reference_path = str(cfg.get("reference_h5ad", "")).strip()
-    if not reference_path:
-        raise ValueError("annotation.scanvi.reference_h5ad must be set for method=scanvi")
-
+    reference_path = _resolve_reference_path(cfg, reference_h5ad, "scanvi")
     reference_label_key = str(cfg.get("reference_label_key", "cell_type")).strip()
     reference_batch_key = str(cfg.get("reference_batch_key", "")).strip()
     query_batch_key = str(cfg.get("query_batch_key", "")).strip()
@@ -168,42 +201,40 @@ def _annotate_with_scanvi(adata_query, cfg: dict, target_col: str, unknown_label
         logging.warning("SCANVI configured with GPU but CUDA is unavailable; falling back to CPU")
         accelerator = "cpu"
 
-    torch.set_float32_matmul_precision("medium")
+    if hasattr(torch, "set_float32_matmul_precision"):
+        torch.set_float32_matmul_precision(str(cfg.get("float32_matmul_precision", "medium")))
     scvi.settings.seed = seed
-    scvi.settings.dl_num_workers = 0
+    scvi.settings.dl_num_workers = int(cfg.get("dl_num_workers", 0))
     scvi.settings.dl_persistent_workers = False
 
     adata_ref = sc.read_h5ad(reference_path)
     if reference_label_key not in adata_ref.obs.columns:
         raise ValueError(f"Reference label key not found in atlas: {reference_label_key}")
 
+    original_query = adata_query.copy()
     adata_ref = adata_ref[adata_ref.obs[reference_label_key].notna()].copy()
     adata_ref.obs[reference_label_key] = _safe_obs_str(adata_ref.obs[reference_label_key], unknown_label)
-    adata_query = adata_query.copy()
+    adata_query_model = adata_query.copy()
 
     adata_ref.var_names_make_unique()
-    adata_query.var_names_make_unique()
+    original_query.var_names_make_unique()
+    adata_query_model.var_names_make_unique()
 
-    if counts_layer:
-        if counts_layer in adata_ref.layers:
-            adata_ref.X = adata_ref.layers[counts_layer].copy()
-        if counts_layer in adata_query.layers:
-            adata_query.X = adata_query.layers[counts_layer].copy()
-        elif counts_layer != "X":
-            raise ValueError(f"Counts layer {counts_layer!r} not found in query AnnData layers")
+    _copy_layer_to_x(adata_ref, counts_layer, "reference")
+    _copy_layer_to_x(adata_query_model, counts_layer, "query")
 
-    common = adata_ref.var_names.intersection(adata_query.var_names)
+    common = adata_ref.var_names.intersection(adata_query_model.var_names)
     if len(common) < min_shared_genes:
         raise ValueError(
             f"Too few overlapping genes between reference and query ({len(common)} < {min_shared_genes})"
         )
     adata_ref = adata_ref[:, common].copy()
-    adata_query = adata_query[:, common].copy()
+    adata_query_model = adata_query_model[:, common].copy()
 
     if sparse.issparse(adata_ref.X):
         adata_ref.X = adata_ref.X.tocsr()
-    if sparse.issparse(adata_query.X):
-        adata_query.X = adata_query.X.tocsr()
+    if sparse.issparse(adata_query_model.X):
+        adata_query_model.X = adata_query_model.X.tocsr()
 
     setup_kwargs = {"labels_key": reference_label_key}
     if reference_batch_key:
@@ -215,11 +246,11 @@ def _annotate_with_scanvi(adata_query, cfg: dict, target_col: str, unknown_label
         setup_kwargs["batch_key"] = reference_batch_key
 
         if query_batch_key:
-            if query_batch_key not in adata_query.obs.columns:
+            if query_batch_key not in adata_query_model.obs.columns:
                 raise ValueError(
                     f"annotation.scanvi.query_batch_key={query_batch_key!r} is not present in query obs"
                 )
-            adata_query.obs[reference_batch_key] = _safe_obs_str(adata_query.obs[query_batch_key], "Unknown")
+            adata_query_model.obs[reference_batch_key] = _safe_obs_str(adata_query_model.obs[query_batch_key], "Unknown")
         else:
             ref_batches = pd.Series(adata_ref.obs[reference_batch_key], copy=False)
             ref_non_na = ref_batches[ref_batches.notna()]
@@ -228,7 +259,7 @@ def _annotate_with_scanvi(adata_query, cfg: dict, target_col: str, unknown_label
                     "annotation.scanvi.reference_batch_key is set but reference batch column has no non-null values"
                 )
             # Default query to a single existing reference batch to avoid forcing query-side batch correction metadata.
-            adata_query.obs[reference_batch_key] = str(ref_non_na.iloc[0])
+            adata_query_model.obs[reference_batch_key] = str(ref_non_na.iloc[0])
 
     scvi.model.SCVI.setup_anndata(adata_ref, **setup_kwargs)
     scvi_model = scvi.model.SCVI(
@@ -259,8 +290,8 @@ def _annotate_with_scanvi(adata_query, cfg: dict, target_col: str, unknown_label
 
     with tempfile.TemporaryDirectory(prefix="scanvi_ref_model_") as model_dir:
         scanvi_model.save(model_dir, overwrite=True)
-        scvi.model.SCANVI.prepare_query_anndata(adata_query, model_dir)
-        scanvi_query = scvi.model.SCANVI.load_query_data(adata_query, model_dir)
+        scvi.model.SCANVI.prepare_query_anndata(adata_query_model, model_dir)
+        scanvi_query = scvi.model.SCANVI.load_query_data(adata_query_model, model_dir)
 
         scanvi_query.train(
             max_epochs=query_finetune_max_epochs,
@@ -270,26 +301,33 @@ def _annotate_with_scanvi(adata_query, cfg: dict, target_col: str, unknown_label
             batch_size=batch_size,
         )
 
-        pred = scanvi_query.predict(adata_query)
-        adata_query.obs[target_col] = _safe_obs_str(pd.Series(pred, index=adata_query.obs_names), unknown_label).values
+        pred = scanvi_query.predict(adata_query_model)
+        pred_series = _safe_obs_str(pd.Series(pred, index=adata_query_model.obs_names), unknown_label)
 
         try:
-            pred_soft = scanvi_query.predict(adata_query, soft=True)
+            pred_soft = scanvi_query.predict(adata_query_model, soft=True)
             if isinstance(pred_soft, pd.DataFrame):
                 pred_soft_df = pred_soft.copy()
             else:
-                pred_soft_df = pd.DataFrame(pred_soft, index=adata_query.obs_names)
+                pred_soft_df = pd.DataFrame(pred_soft, index=adata_query_model.obs_names)
         except Exception as exc:
             logging.warning("Could not compute SCANVI soft predictions: %s", exc)
-            pred_soft_df = pd.DataFrame(index=adata_query.obs_names)
+            pred_soft_df = pd.DataFrame(index=adata_query_model.obs_names)
 
         try:
-            adata_query.obsm["X_scanvi"] = scanvi_query.get_latent_representation(adata_query)
+            scanvi_latent = scanvi_query.get_latent_representation(adata_query_model)
         except Exception as exc:
             logging.warning("Could not extract SCANVI latent representation: %s", exc)
+            scanvi_latent = None
+
+    original_query.obs[target_col] = pred_series.reindex(original_query.obs_names).fillna(unknown_label).values
+
+    if scanvi_latent is not None:
+        latent_df = pd.DataFrame(scanvi_latent, index=adata_query_model.obs_names)
+        original_query.obsm["X_scanvi"] = latent_df.reindex(original_query.obs_names).to_numpy()
 
     if not pred_soft_df.empty:
-        pred_soft_df = pred_soft_df.reindex(adata_query.obs_names)
+        pred_soft_df = pred_soft_df.reindex(original_query.obs_names)
         probs = pred_soft_df.to_numpy(dtype=float, copy=True)
         probs = np.clip(probs, 1e-12, 1.0)
         row_sums = probs.sum(axis=1, keepdims=True)
@@ -303,35 +341,36 @@ def _annotate_with_scanvi(adata_query, cfg: dict, target_col: str, unknown_label
         else:
             margin = np.ones(probs.shape[0], dtype=float)
 
-        adata_query.obs["scanvi_pred_confidence"] = pd.to_numeric(conf, errors="coerce")
-        adata_query.obs["scanvi_pred_entropy"] = pd.to_numeric(entropy, errors="coerce")
-        adata_query.obs["scanvi_pred_margin"] = pd.to_numeric(margin, errors="coerce")
-        adata_query.obsm["scanvi_pred_proba"] = probs
-        adata_query.uns["scanvi_pred_proba_columns"] = [str(c) for c in pred_soft_df.columns]
+        original_query.obs["scanvi_pred_confidence"] = pd.to_numeric(conf, errors="coerce")
+        original_query.obs["scanvi_pred_entropy"] = pd.to_numeric(entropy, errors="coerce")
+        original_query.obs["scanvi_pred_margin"] = pd.to_numeric(margin, errors="coerce")
+        original_query.obsm["scanvi_pred_proba"] = probs
+        original_query.uns["scanvi_pred_proba_columns"] = [str(c) for c in pred_soft_df.columns]
 
-    adata_query.uns.setdefault("integration_annotation", {})
+    original_query.uns.setdefault("integration_annotation", {})
     conf_series = (
-        pd.to_numeric(adata_query.obs["scanvi_pred_confidence"], errors="coerce")
-        if "scanvi_pred_confidence" in adata_query.obs.columns
+        pd.to_numeric(original_query.obs["scanvi_pred_confidence"], errors="coerce")
+        if "scanvi_pred_confidence" in original_query.obs.columns
         else pd.Series(dtype=float)
     )
     entropy_series = (
-        pd.to_numeric(adata_query.obs["scanvi_pred_entropy"], errors="coerce")
-        if "scanvi_pred_entropy" in adata_query.obs.columns
+        pd.to_numeric(original_query.obs["scanvi_pred_entropy"], errors="coerce")
+        if "scanvi_pred_entropy" in original_query.obs.columns
         else pd.Series(dtype=float)
     )
     margin_series = (
-        pd.to_numeric(adata_query.obs["scanvi_pred_margin"], errors="coerce")
-        if "scanvi_pred_margin" in adata_query.obs.columns
+        pd.to_numeric(original_query.obs["scanvi_pred_margin"], errors="coerce")
+        if "scanvi_pred_margin" in original_query.obs.columns
         else pd.Series(dtype=float)
     )
-    adata_query.uns["integration_annotation"]["scanvi"] = {
+    original_query.uns["integration_annotation"]["scanvi"] = {
         "reference_h5ad": reference_path,
         "reference_label_key": reference_label_key,
         "reference_batch_key": reference_batch_key,
         "query_batch_key": query_batch_key,
         "legacy_batch_key": legacy_batch_key,
         "counts_layer": counts_layer or "X",
+        "prediction_column": target_col,
         "accelerator": accelerator,
         "use_gpu_requested": bool(use_gpu_requested),
         "scvi_max_epochs": scvi_max_epochs,
@@ -342,13 +381,14 @@ def _annotate_with_scanvi(adata_query, cfg: dict, target_col: str, unknown_label
         "seed": seed,
         "min_shared_genes": min_shared_genes,
         "n_reference_cells": int(adata_ref.n_obs),
-        "n_query_cells": int(adata_query.n_obs),
+        "n_query_cells": int(original_query.n_obs),
+        "n_query_genes_preserved": int(original_query.n_vars),
         "n_shared_genes": int(len(common)),
-        "embedding_key": "X_scanvi" if "X_scanvi" in adata_query.obsm else "",
+        "embedding_key": "X_scanvi" if "X_scanvi" in original_query.obsm else "",
         "mapping_score_analog": {
-            "confidence_key": "scanvi_pred_confidence" if "scanvi_pred_confidence" in adata_query.obs.columns else "",
-            "entropy_key": "scanvi_pred_entropy" if "scanvi_pred_entropy" in adata_query.obs.columns else "",
-            "margin_key": "scanvi_pred_margin" if "scanvi_pred_margin" in adata_query.obs.columns else "",
+            "confidence_key": "scanvi_pred_confidence" if "scanvi_pred_confidence" in original_query.obs.columns else "",
+            "entropy_key": "scanvi_pred_entropy" if "scanvi_pred_entropy" in original_query.obs.columns else "",
+            "margin_key": "scanvi_pred_margin" if "scanvi_pred_margin" in original_query.obs.columns else "",
             "confidence_mean": float(conf_series.mean()) if conf_series.notna().any() else None,
             "confidence_median": float(conf_series.median()) if conf_series.notna().any() else None,
             "entropy_mean": float(entropy_series.mean()) if entropy_series.notna().any() else None,
@@ -362,28 +402,37 @@ def _annotate_with_scanvi(adata_query, cfg: dict, target_col: str, unknown_label
             },
         },
     }
-    return adata_query
+    return original_query
 
 
-def annotate(adata, cfg: dict):
-    method = str(cfg.get("method", "from_existing_column"))
-    source_col = str(cfg.get("source_column", "cell_type"))
-    target_col = str(cfg.get("target_column", "cell_type"))
+def _default_target_col(method: str) -> str:
+    return f"{method}_predicted_cell_type"
+
+
+def annotate(adata, cfg: dict, reference_h5ad: str = ""):
+    method = str(cfg.get("method", "from_existing_column")).strip().lower()
+    source_col = str(cfg.get("source_column", "cell_type")).strip()
+    configured_target = str(cfg.get("target_column", "")).strip()
+    target_col = configured_target or _default_target_col(method)
     unknown_label = str(cfg.get("unknown_label", "Unknown"))
 
-    if method == "from_existing_column" and source_col in adata.obs.columns:
+    if method == "from_existing_column":
+        if source_col not in adata.obs.columns:
+            raise ValueError(f"annotation.source_column={source_col!r} not found in AnnData obs")
         adata.obs[target_col] = _safe_obs_str(adata.obs[source_col], unknown_label)
     elif method == "from_leiden":
-        if "leiden" in adata.obs.columns:
-            adata.obs[target_col] = "Cluster_" + adata.obs["leiden"].astype(str)
-        else:
-            adata.obs[target_col] = unknown_label
+        if "leiden" not in adata.obs.columns:
+            raise ValueError("annotation.method=from_leiden requires obs['leiden'] from integration")
+        adata.obs[target_col] = "Cluster_" + adata.obs["leiden"].astype(str)
     elif method == "symphony":
-        adata = _annotate_with_symphony(adata, cfg.get("symphony", {}), target_col, unknown_label)
+        adata = _annotate_with_symphony(adata, cfg.get("symphony", {}), target_col, unknown_label, reference_h5ad)
     elif method == "scanvi":
-        adata = _annotate_with_scanvi(adata, cfg.get("scanvi", {}), target_col, unknown_label)
+        adata = _annotate_with_scanvi(adata, cfg.get("scanvi", {}), target_col, unknown_label, reference_h5ad)
     else:
-        adata.obs[target_col] = unknown_label
+        raise ValueError(
+            f"Unsupported annotation.method={method!r}. "
+            "Choose one of: from_existing_column, from_leiden, symphony, scanvi."
+        )
 
     adata.uns.setdefault("integration_annotation", {})
     adata.uns["integration_annotation"]["annotation"] = {
@@ -391,6 +440,7 @@ def annotate(adata, cfg: dict):
         "source_column": source_col,
         "target_column": target_col,
         "unknown_label": unknown_label,
+        "reference_h5ad": reference_h5ad if method in REFERENCE_REQUIRED_METHODS else "",
     }
     return adata, target_col, unknown_label
 
@@ -401,6 +451,7 @@ def main(argv: list[str] | None = None):
     p.add_argument("--study", default="")
     p.add_argument("--input", required=True)
     p.add_argument("--config", required=True)
+    p.add_argument("--reference-h5ad", default="")
     p.add_argument("--output", required=True)
     p.add_argument("--summary", required=True)
     p.add_argument("--log", default=None)
@@ -411,7 +462,7 @@ def main(argv: list[str] | None = None):
     ann_cfg = resolve_annotation_cfg(cfg)
 
     adata = sc.read_h5ad(args.input)
-    adata, target_col, unknown_label = annotate(adata, ann_cfg)
+    adata, target_col, unknown_label = annotate(adata, ann_cfg, reference_h5ad=args.reference_h5ad)
 
     out = Path(args.output)
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -423,7 +474,7 @@ def main(argv: list[str] | None = None):
     summary = Path(args.summary)
     summary.parent.mkdir(parents=True, exist_ok=True)
     counts.to_csv(summary, index=False)
-    logging.info("Wrote annotation summary: %s", summary)
+    logging.info("Wrote annotation summary for %s: %s", target_col, summary)
 
 
 if __name__ == "__main__":

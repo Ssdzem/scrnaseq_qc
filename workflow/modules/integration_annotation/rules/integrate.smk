@@ -6,6 +6,8 @@ rule ia_integrate_all:
         integrated="out/integration_annotation/all_studies/all_integrated.h5ad",
         report="out/integration_annotation/all_studies/integration_report.json",
         done=touch("out/integration_annotation/all_studies/.integrated_done"),
+    params:
+        integration_method=_ia_integration_method,
     log:
         _ia_log("all_studies")
     conda:
@@ -33,6 +35,7 @@ rule ia_integrate_study:
         done=touch("out/integration_annotation/{study}/.integrated_done"),
     params:
         study=lambda wc: wc.study,
+        integration_method=_ia_integration_method,
     log:
         _ia_log("{study}")
     conda:
