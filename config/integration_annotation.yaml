@@ -1,0 +1,139 @@
+integration:
+  # Enable an integration backend. If false, uses PCA for graph/UMAP/Leiden.
+  enabled: true
+<<<<<<< HEAD
+  # Integration backend: "scvi", "sysvi", or "harmony".
+  method: "sysvi"
+  # Primary batch/system key. For sysVI this is generated from system_key_components below.
+  batch_key: "sysvi_system"
+  # Components used to build sysvi_system for strong cycle-consistency correction.
+  system_key_components:
+    - "assay"
+    - "platform"
+    - "chemistry"
+  system_key_separator: "__"
+  # Additional weaker nuisance covariates.
+  categorical_covariate_keys:
+    - "study_accession"
+  continuous_covariate_keys: []
+  # sysVI expects normalized log-expression; scVI defaults to counts when layer is omitted.
+  layer: "log1p"
+=======
+  # Integration backend: "scvi" or "harmony".
+  method: "scvi"
+  # Which obs key to use as batch for integration.
+  batch_key: "study_accession"
+>>>>>>> parent of 00fc3bc (feature:integration with gpu, succesful run)
+  # Embedding / graph parameters.
+  n_pcs: 50
+  n_neighbors: 15
+  leiden_resolution: 1.0
+<<<<<<< HEAD
+  # Skip PCA/UMAP for the million-cell scVI path unless explicitly needed.
+  compute_pca: false
+  compute_umap: false
+  compute_leiden: true
+  # scVI/sysVI training knobs.
+  scvi_max_epochs: 400
+  sysvi_max_epochs: 400
+  n_latent: 30
+  batch_size: 4096
+  validation_size: 0.1
+  check_val_every_n_epoch: 1
+  early_stopping: true
+  early_stopping_monitor: "elbo_validation"
+  early_stopping_patience: 30
+  dl_num_workers: 4
+  num_threads: 16
+  # sysVI-specific model and loss settings.
+  sysvi:
+    prior: "vamp"
+    n_prior_components: 20
+    trainable_priors: true
+    n_layers: 2
+    n_hidden: 256
+    dropout_rate: 0.1
+    out_var_mode: "feature"
+    embed_categorical_covariates: true
+    weight_batches: true
+    get_latent_mc_samples: 100
+    plan_kwargs:
+      z_distance_cycle_weight: 5.0
+  # GPU settings. Set use_gpu false to force CPU; require_gpu fails fast if CUDA is unavailable.
+  use_gpu: true
+  require_gpu: true
+  accelerator: "gpu"
+  devices: 1
+  float32_matmul_precision: "high"
+=======
+  # scVI-specific training knobs.
+  scvi_max_epochs: 400
+>>>>>>> parent of 00fc3bc (feature:integration with gpu, succesful run)
+  seed: 0
+
+annotation:
+  # Strategy options: "from_existing_column", "from_leiden", "symphony", "scanvi", or fallback to Unknown.
+  method: "from_existing_column"
+  source_column: "cell_type"
+  target_column: "cell_type"
+  unknown_label: "Unknown"
+  symphony:
+    # Reference atlas with precomputed PCA/harmony context suitable for Symphony mapping.
+    reference_h5ad: ""
+    # Label column in reference atlas to transfer to query cells.
+    reference_label_key: "cell_type"
+    # Optional batch columns.
+    reference_batch_key: "sample_id"
+    query_batch_key: "sample_id"
+    # k in kNN label transfer.
+    k: 5
+  scanvi:
+    # Reference atlas containing known labels for semi-supervised transfer.
+    reference_h5ad: ""
+    reference_label_key: "cell_type"
+    # Batch key and optional counts layer used for SCVI/SCANVI setup.
+    batch_key: "sample_id"
+    counts_layer: "counts"
+    # Training settings.
+    scvi_max_epochs: 100
+    scanvi_max_epochs: 30
+    n_latent: 30
+    seed: 0
+
+evaluation:
+  # Keys used by the lightweight evaluator.
+  batch_key: "sample_id"
+  label_key: "cell_type"
+  unknown_label: "Unknown"
+  # Extended benchmarking using scIB.
+  scib:
+    enabled: true
+    # Embeddings to benchmark if present in adata.obsm.
+    embeddings:
+      - "X_integrated"
+      - "X_scVI"
+      - "X_scanvi"
+      - "X_symphony"
+      - "X_harmony"
+      - "X_pca_harmony"
+      - "X_pca"
+    # scib.metrics.metrics options (set to true to include all metric families).
+    ari: true
+    nmi: true
+    silhouette: true
+    pcr: true
+    cell_cycle: true
+    hvg_overlap: true
+    isolated_labels: true
+    isolated_labels_f1: true
+    isolated_labels_asw: true
+    graph_connectivity: true
+    trajectory: true
+    kbet: true
+    lisi_graph: true
+    ilisi: true
+    clisi: true
+    type: "embed"
+    lisi_subsample: 0.5
+    n_cores: 1
+    verbose: false

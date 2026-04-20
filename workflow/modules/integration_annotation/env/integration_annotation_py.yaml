@@ -1,0 +1,17 @@
+name: integration_annotation_py
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python=3.11
+  - scanpy>=1.10
+  - anndata>=0.12.5
+  - pandas
+  - numpy
+  - pyyaml
+  - harmonypy
+  - python-igraph
+  - leidenalg
+  - pip
+  - pip:
+      - "scvi-tools[cuda]>=1.3"
