@@ -2,5 +2,4 @@
 
 include: "rules/standardize.smk"
 
-ruleorder: standardize_all > standardize_study
-
+ruleorder: standardize_all > standardize_study_py > standardize_study_r
