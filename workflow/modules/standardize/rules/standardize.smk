@@ -22,6 +22,7 @@ if _SCRIPTS_DIR is None:
     )
 sys.path.insert(0, str(_SCRIPTS_DIR))
 from cleaner_registry import CLEANER_REGISTRY, normalize_cleaner_name
+from standardize_dependencies import unpack_requires_fetch_done
 
 
 def _spec_path_for_study(study: str) -> Path:
@@ -38,6 +39,10 @@ def _studies_to_process() -> list[str]:
 def _study_out_h5ad(study: str) -> str:
     # Canonical output location is fixed by convention.
     return f"out/{study}/raw.h5ad"
+
+
+def _study_trim_table(study: str) -> str:
+    return f"out/{study}/trimming_tables.csv"
 
 
 def _load_spec(study: str) -> dict:
@@ -106,6 +111,13 @@ def _required_spec_input_paths(study: str) -> list[str]:
     return sorted(paths)
 
 
+def _standardize_unpack_fetch_input(study: str) -> str | list[str]:
+    required_paths = _required_spec_input_paths(study)
+    if unpack_requires_fetch_done(study=study, required_paths=required_paths):
+        return f"out/{study}/.fetch_done"
+    return []
+
+
 def _pipeline_env(study: str) -> str:
     cleaners = _pipeline_cleaners(study)
     needs_r = any(CLEANER_REGISTRY[c].env == "r" for c in cleaners)
@@ -140,17 +152,23 @@ def _workers_for_study(study: str) -> int:
 
 
 STUDIES = _studies_to_process()
+PY_STUDIES = [study for study in STUDIES if _pipeline_env(study).endswith("standardize_py.yaml")]
+R_STUDIES = [study for study in STUDIES if _pipeline_env(study).endswith("standardize_r.yaml")]
+
+
+def _study_constraint(studies: list[str]) -> str:
+    return "|".join(studies) if studies else r"$^"
 
 
 rule standardize_all:
     input:
-        expand("{h5ad}", h5ad=[_study_out_h5ad(s) for s in STUDIES])
+        [_study_out_h5ad(s) for s in STUDIES] + [_study_trim_table(s) for s in STUDIES]
 
 
 rule standardize_unpack_study:
     input:
         spec=lambda wc: str(_spec_path_for_study(wc.study)),
-        fetch_done="out/{study}/.fetch_done",
+        fetch_done=lambda wc: _standardize_unpack_fetch_input(wc.study),
     output:
         done=touch("out/{study}/.unpack_done"),
     params:
@@ -185,12 +203,15 @@ rule standardize_validate_inputs:
             )
 
 
-rule standardize_study:
+rule standardize_study_py:
     input:
         spec=lambda wc: str(_spec_path_for_study(wc.study)),
         validated_done="out/{study}/.standardize_inputs_validated_done",
     output:
         h5ad=_study_out_h5ad("{study}"),
+        trim_csv=_study_trim_table("{study}"),
+    wildcard_constraints:
+        study=_study_constraint(PY_STUDIES)
     params:
         study=lambda wc: wc.study,
         workers=lambda wc: _workers_for_study(wc.study),
@@ -199,7 +220,37 @@ rule standardize_study:
     threads:
         lambda wc: _workers_for_study(wc.study)
     conda:
-        lambda wc: _pipeline_env(wc.study)
+        "../env/standardize_py.yaml"
+    shell:
+        r"""
+        mkdir -p $(dirname {log})
+        $CONDA_PREFIX/bin/python -u workflow/modules/standardize/scripts/standardize.py \
+          --spec {input.spec} \
+          --study {params.study} \
+          --output {output.h5ad} \
+          --workers {params.workers} \
+          --log {log}
+        """
+
+
+rule standardize_study_r:
+    input:
+        spec=lambda wc: str(_spec_path_for_study(wc.study)),
+        validated_done="out/{study}/.standardize_inputs_validated_done",
+    output:
+        h5ad=_study_out_h5ad("{study}"),
+        trim_csv=_study_trim_table("{study}"),
+    wildcard_constraints:
+        study=_study_constraint(R_STUDIES)
+    params:
+        study=lambda wc: wc.study,
+        workers=lambda wc: _workers_for_study(wc.study),
+    log:
+        "out/logs/standardize/{study}.log"
+    threads:
+        lambda wc: _workers_for_study(wc.study)
+    conda:
+        "../env/standardize_r.yaml"
     shell:
         r"""
         mkdir -p $(dirname {log})
