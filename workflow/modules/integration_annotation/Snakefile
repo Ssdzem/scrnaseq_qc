@@ -2,6 +2,9 @@
 
 configfile: "config/integration_annotation.yaml"
 
+wildcard_constraints:
+    study=r"(?!all_studies$)[^/]+"
+
 include: "rules/common.smk"
 include: "rules/integrate.smk"
 include: "rules/reference_atlas.smk"

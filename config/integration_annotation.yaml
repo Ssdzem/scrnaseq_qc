@@ -1,28 +1,39 @@
 reference_atlas:
-  # This module intentionally uses the bundled Liver Cell Atlas reference only.
+  # This worktree uses the bundled Liver Cell Atlas raw matrix plus the myeloid-only annotation table.
   enabled: true
+  zip_url: "https://www.livercellatlas.org/data_files/toDownload/rawData_human.zip"
+  metadata_url: "https://www.livercellatlas.org/data_files/toDownload/annot_humanMyeloid.csv"
   cache_dir: "data/ref/cache"
   extract_dir: "data/ref/rawData_human"
   matrix_subdir: "countTable_human"
   metadata_join_key: "cell"
   metadata_label_col: "annot"
+  output_h5ad: "data/ref/lca_human_myeloid_reference.h5ad"
+  report: "data/ref/reference_build_report.myeloid.json"
+  ready_marker: "data/ref/.reference_myeloid_ready"
 
 integration:
   # Enable an integration backend. If false, uses PCA for graph/UMAP/Leiden.
   enabled: true
   # Required before execution. Choose exactly one: "sysvi", "scvi", or "harmony".
-  method: ""
+  method: "sysvi"
   # Primary batch/system key. For sysVI this can be generated from system_key_components below.
   batch_key: "sysvi_system"
-  # Components used to build sysvi_system for strong cycle-consistency correction.
+  # The standardized inputs do not carry a canonical `technology` column, so derive it from platform+chemistry.
+  obs_key_aliases:
+    technology:
+      components:
+        - "platform"
+        - "chemistry"
+      separator: "__"
+  # Use assay + derived technology + study_accession directly in the SysVI system key.
   system_key_components:
     - "assay"
-    - "platform"
-    - "chemistry"
+    - "technology"
+    - "study_accession"
   system_key_separator: "__"
   # Additional weaker nuisance covariates.
-  categorical_covariate_keys:
-    - "study_accession"
+  categorical_covariate_keys: []
   continuous_covariate_keys: []
   # sysVI expects normalized log-expression; scVI defaults to counts when layer is omitted.
   layer: "log1p"
@@ -60,7 +71,7 @@ integration:
     get_latent_mc_samples: 100
     plan_kwargs:
       z_distance_cycle_weight: 5.0
-  # GPU settings. Set use_gpu false to force CPU; require_gpu fails fast if CUDA is unavailable.
+  # Use GPU execution in this worktree.
   use_gpu: true
   require_gpu: true
   accelerator: "gpu"
@@ -70,23 +81,24 @@ integration:
 
 annotation:
   # Strategy options: "from_existing_column", "from_leiden", "symphony", or "scanvi".
-  method: "from_existing_column"
+  method: "scanvi"
   source_column: "cell_type"
   # Empty target_column writes to {annotation_method}_predicted_cell_type.
-  target_column: ""
+  target_column: "scanvi_predicted_cell_type"
   unknown_label: "Unknown"
   symphony:
-    # Reference h5ad is intentionally supplied by Snakemake as data/ref/lca_human_reference.h5ad.
+    # Reference h5ad is supplied by Snakemake from reference_atlas.output_h5ad.
     reference_label_key: "cell_type"
-    reference_batch_key: "sample_id"
+    reference_batch_key: "sample"
     query_batch_key: "sample_id"
     # k in kNN label transfer.
     k: 5
   scanvi:
-    # Reference h5ad is intentionally supplied by Snakemake as data/ref/lca_human_reference.h5ad.
+    # Reference h5ad is supplied by Snakemake from reference_atlas.output_h5ad.
     reference_label_key: "cell_type"
-    reference_batch_key: "sample_id"
-    query_batch_key: "sample_id"
+    # The myeloid atlas metadata has `sample`, not `sample_id`; leaving batch keys empty avoids a false mismatch.
+    reference_batch_key: ""
+    query_batch_key: ""
     counts_layer: "counts"
     # Training settings.
     scvi_max_epochs: 100
@@ -95,7 +107,7 @@ annotation:
     batch_size: 8192
     n_latent: 30
     min_shared_genes: 2000
-    accelerator: "cpu"
+    accelerator: "gpu"
     seed: 0
 
 evaluation:

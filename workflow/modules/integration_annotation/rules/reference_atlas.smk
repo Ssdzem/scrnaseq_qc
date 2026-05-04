@@ -3,8 +3,8 @@ rule ia_prepare_reference_atlas:
         ia_config=IA_CONFIG_PATH,
     output:
         ref_h5ad=IA_REFERENCE_H5AD,
-        report="data/ref/reference_build_report.json",
-        done=touch("data/ref/.reference_ready"),
+        report=IA_REFERENCE_REPORT,
+        done=touch(IA_REFERENCE_READY_MARKER),
     log:
         _ia_log("reference_atlas")
     conda:

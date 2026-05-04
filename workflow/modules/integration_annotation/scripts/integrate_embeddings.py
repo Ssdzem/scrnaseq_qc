@@ -90,6 +90,40 @@ def _ensure_composite_obs_key(adata, key: str, components: list[str], sep: str =
     adata.obs[key] = pd.Categorical(composite)
 
 
+def _materialize_obs_aliases(adata, alias_cfg, unknown_label: str = "Unknown"):
+    if not isinstance(alias_cfg, dict):
+        return
+
+    for target_key, spec in alias_cfg.items():
+        target_key = str(target_key).strip()
+        if not target_key or target_key in adata.obs.columns:
+            continue
+
+        if isinstance(spec, dict):
+            components = _as_list(spec.get("components", []))
+            if components and all(component in adata.obs.columns for component in components):
+                _ensure_composite_obs_key(
+                    adata,
+                    target_key,
+                    components,
+                    sep=str(spec.get("separator", "__")),
+                    unknown_label=unknown_label,
+                )
+                continue
+            candidates = _as_list(spec.get("candidates", spec.get("source", [])))
+        else:
+            candidates = _as_list(spec)
+
+        for candidate in candidates:
+            if candidate not in adata.obs.columns:
+                continue
+            series = adata.obs[candidate]
+            series = series.where(~series.isna(), other=unknown_label)
+            series = series.astype(str).replace({"": unknown_label, "nan": unknown_label, "None": unknown_label})
+            adata.obs[target_key] = pd.Categorical(series)
+            break
+
+
 def _resolve_integration_method(cfg: dict, enabled: bool) -> str:
     method = str(cfg.get("method", cfg.get("integration_method", ""))).strip().lower()
     if not enabled:
@@ -146,6 +180,7 @@ def run_integration(adata, cfg: dict, scope_label: str):
     continuous_covariate_keys = _as_list(cfg.get("continuous_covariate_keys", []))
     system_key_components = _as_list(cfg.get("system_key_components", []))
     system_key_separator = str(cfg.get("system_key_separator", "__"))
+    obs_key_aliases = cfg.get("obs_key_aliases", {}) or {}
     batch_keys_for_reporting = [
         *system_key_components,
         scvi_batch_key,
@@ -174,6 +209,7 @@ def run_integration(adata, cfg: dict, scope_label: str):
     np.random.seed(seed)
 
     ensure_obs_key(adata, "sample_id", scope_label)
+    _materialize_obs_aliases(adata, obs_key_aliases)
     if system_key_components:
         _ensure_composite_obs_key(adata, scvi_batch_key, system_key_components, sep=system_key_separator)
     elif scvi_batch_key:
@@ -397,6 +433,7 @@ def run_integration(adata, cfg: dict, scope_label: str):
         "continuous_covariate_keys": continuous_covariate_keys,
         "system_key_components": system_key_components,
         "system_key_separator": system_key_separator,
+        "obs_key_aliases": obs_key_aliases,
         "scvi_max_epochs": scvi_max_epochs,
         "sysvi_max_epochs": sysvi_max_epochs,
         "n_latent": n_latent,

@@ -26,13 +26,15 @@ rule ia_integrate_all:
 
 
 rule ia_integrate_study:
+    wildcard_constraints:
+        study=r"(?!all_studies$)[^/]+"
     input:
         pre_integration="out/{study}/qc/{study}_pre_integration.h5ad",
         ia_config=IA_CONFIG_PATH,
     output:
         integrated="out/integration_annotation/{study}/{study}_integrated.h5ad",
-        report="out/integration_annotation/{study}/integration_report.json",
-        done=touch("out/integration_annotation/{study}/.integrated_done"),
+        report="out/integration_annotation/{study}/{study}_integration_report.json",
+        done=touch("out/integration_annotation/{study}/.{study}_integrated_done"),
     params:
         study=lambda wc: wc.study,
         integration_method=_ia_integration_method,

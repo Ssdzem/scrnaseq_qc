@@ -25,14 +25,16 @@ rule ia_evaluate_all:
 
 
 rule ia_evaluate_study:
+    wildcard_constraints:
+        study=r"(?!all_studies$)[^/]+"
     input:
         annotated="out/integration_annotation/{study}/{study}_annotated.h5ad",
         ia_config=IA_CONFIG_PATH,
-        annotated_done="out/integration_annotation/{study}/.annotated_done",
+        annotated_done="out/integration_annotation/{study}/.{study}_annotated_done",
     output:
-        metrics_json="out/integration_annotation/{study}/evaluation_metrics.json",
-        metrics_csv="out/integration_annotation/{study}/evaluation_metrics.csv",
-        done=touch("out/integration_annotation/{study}/.evaluated_done"),
+        metrics_json="out/integration_annotation/{study}/{study}_evaluation_metrics.json",
+        metrics_csv="out/integration_annotation/{study}/{study}_evaluation_metrics.csv",
+        done=touch("out/integration_annotation/{study}/.{study}_evaluated_done"),
     params:
         study=lambda wc: wc.study,
     log:

@@ -41,4 +41,4 @@ rule qc_preintegration_study:
 
 rule integration_annotation_study_from_config:
     input:
-        lambda wc: f"out/integration_annotation/{_study_from_config()}/.integration_annotation_done"
+        lambda wc: f"out/integration_annotation/{_study_from_config()}/.{_study_from_config()}_integration_annotation_done"

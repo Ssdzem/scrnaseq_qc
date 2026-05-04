@@ -29,15 +29,17 @@ rule ia_annotate_all:
 
 
 rule ia_annotate_study:
+    wildcard_constraints:
+        study=r"(?!all_studies$)[^/]+"
     input:
         integrated="out/integration_annotation/{study}/{study}_integrated.h5ad",
         ia_config=IA_CONFIG_PATH,
-        integrated_done="out/integration_annotation/{study}/.integrated_done",
+        integrated_done="out/integration_annotation/{study}/.{study}_integrated_done",
         reference=_ia_reference_targets,
     output:
         annotated="out/integration_annotation/{study}/{study}_annotated.h5ad",
-        summary="out/integration_annotation/{study}/annotation_summary.csv",
-        done=touch("out/integration_annotation/{study}/.annotated_done"),
+        summary="out/integration_annotation/{study}/{study}_annotation_summary.csv",
+        done=touch("out/integration_annotation/{study}/.{study}_annotated_done"),
     params:
         study=lambda wc: wc.study,
         reference_h5ad=IA_REFERENCE_H5AD,

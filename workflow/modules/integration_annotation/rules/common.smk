@@ -20,19 +20,29 @@ IA_REFERENCE_CFG = IA_FULL_CFG.get("reference_atlas", {}) if isinstance(IA_FULL_
 
 
 def _ia_reference_h5ad() -> str:
-    # The integration_annotation module intentionally uses the bundled Liver Cell Atlas build target.
+    # The integration_annotation module intentionally uses the configured Liver Cell Atlas build target.
     # Annotation scripts receive this resolved path from Snakemake instead of accepting arbitrary atlas paths.
-    return "data/ref/lca_human_reference.h5ad"
+    return str(IA_REFERENCE_CFG.get("output_h5ad", "data/ref/lca_human_reference.h5ad")).strip()
+
+
+def _ia_reference_report() -> str:
+    return str(IA_REFERENCE_CFG.get("report", "data/ref/reference_build_report.json")).strip()
+
+
+def _ia_reference_ready_marker() -> str:
+    return str(IA_REFERENCE_CFG.get("ready_marker", "data/ref/.reference_ready")).strip()
 
 
 IA_REFERENCE_H5AD = _ia_reference_h5ad()
+IA_REFERENCE_REPORT = _ia_reference_report()
+IA_REFERENCE_READY_MARKER = _ia_reference_ready_marker()
 
 
 def _ia_reference_targets(_wildcards=None):
     enabled = bool(IA_REFERENCE_CFG.get("enabled", False))
     method = str(IA_ANNOTATION_CFG.get("method", "")).strip().lower()
     if enabled and method in {"symphony", "scanvi"}:
-        return [IA_REFERENCE_H5AD, "data/ref/.reference_ready"]
+        return [IA_REFERENCE_H5AD, IA_REFERENCE_READY_MARKER]
     return []
 
 
