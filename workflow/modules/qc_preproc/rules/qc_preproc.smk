@@ -1,7 +1,34 @@
 from pathlib import Path
+import yaml
 
 
 QC_CONFIG_PATH = str(Path("config/qc.yaml"))
+
+
+def _load_qc_config(path: str) -> dict:
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            return yaml.safe_load(handle) or {}
+    except FileNotFoundError:
+        return {}
+
+
+QC_FULL_CFG = config if isinstance(config, dict) and config else _load_qc_config(QC_CONFIG_PATH)
+QC_CFG = QC_FULL_CFG.get("qc", {}) if isinstance(QC_FULL_CFG, dict) else {}
+
+
+def _qc_backend() -> str:
+    raw = str(QC_CFG.get("backend", QC_CFG.get("preprocessing_backend", "cpu"))).strip().lower()
+    if raw not in {"cpu", "gpu", "auto"}:
+        raise ValueError(
+            "config/qc.yaml requires qc.backend to be one of ['cpu', 'gpu', 'auto']; "
+            f"found {raw!r}."
+        )
+    return raw
+
+
+def _qc_preintegration_env() -> str:
+    return "../env/qc_preproc_gpu_py.yaml" if _qc_backend() in {"gpu", "auto"} else "../env/qc_preproc_py.yaml"
 
 
 def _studies_to_process():
@@ -141,7 +168,7 @@ rule qc_study_pre_integration:
     log:
         _qc_log("{study}")
     conda:
-        "../env/qc_preproc_py.yaml"
+        _qc_preintegration_env()
     shell:
         r"""
         mkdir -p $(dirname {log})
@@ -199,7 +226,7 @@ rule qc_all_pre_integration:
     log:
         _qc_log("all_studies")
     conda:
-        "../env/qc_preproc_py.yaml"
+        _qc_preintegration_env()
     shell:
         r"""
         mkdir -p $(dirname {log})

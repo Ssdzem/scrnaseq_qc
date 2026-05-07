@@ -11,7 +11,7 @@ rule ia_integrate_all:
     log:
         _ia_log("all_studies")
     conda:
-        "../env/integration_annotation_py.yaml"
+        _ia_integrate_env()
     shell:
         r"""
         mkdir -p $(dirname {log})
@@ -39,7 +39,7 @@ rule ia_integrate_study:
     log:
         _ia_log("{study}")
     conda:
-        "../env/integration_annotation_py.yaml"
+        _ia_integrate_env()
     shell:
         r"""
         mkdir -p $(dirname {log})
