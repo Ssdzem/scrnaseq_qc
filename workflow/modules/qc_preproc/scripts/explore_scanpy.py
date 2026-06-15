@@ -26,9 +26,55 @@ def read_qc_config(path: str) -> dict:
     return cfg.get("qc", {})
 
 
+def _as_bool(value) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y", "gpu"}
+    return bool(value)
+
+
+def resolve_backend(cfg: dict) -> tuple[str, bool]:
+    backend = str(cfg.get("backend", cfg.get("preprocessing_backend", "cpu"))).strip().lower()
+    if backend not in {"cpu", "gpu", "auto"}:
+        raise ValueError(f"Unsupported qc.backend={backend!r}; choose one of: cpu, gpu, auto")
+    require_gpu = _as_bool(cfg.get("require_gpu", False))
+    return backend, require_gpu
+
+
 def ensure_obs_key(adata, key: str, fallback_value: str):
     if key not in adata.obs.columns:
         adata.obs[key] = fallback_value
+
+
+def _resolve_rapids_runtime(*, backend: str, require_gpu: bool):
+    if backend == "cpu":
+        return None, False
+
+    try:
+        import cupy as cp
+        import rapids_singlecell as rsc
+    except ImportError as exc:
+        if backend == "gpu" or require_gpu:
+            raise RuntimeError("qc GPU preprocessing requested but RAPIDS SingleCell is not installed") from exc
+        logging.warning("RAPIDS SingleCell not available; falling back to CPU preprocessing: %s", exc)
+        return None, False
+
+    try:
+        gpu_count = int(cp.cuda.runtime.getDeviceCount())
+    except Exception as exc:  # pragma: no cover - depends on local CUDA runtime
+        if backend == "gpu" or require_gpu:
+            raise RuntimeError("qc GPU preprocessing requested but CUDA runtime is unavailable") from exc
+        logging.warning("CUDA runtime unavailable; falling back to CPU preprocessing: %s", exc)
+        return None, False
+
+    if gpu_count < 1:
+        if backend == "gpu" or require_gpu:
+            raise RuntimeError("qc GPU preprocessing requested but no CUDA devices were detected")
+        logging.warning("No CUDA devices detected; falling back to CPU preprocessing")
+        return None, False
+
+    return rsc, True
 
 
 def prepare_before_integration(adata, study: str, cfg: dict):
@@ -36,13 +82,17 @@ def prepare_before_integration(adata, study: str, cfg: dict):
     scvi_batch_key = str(cfg.get("scvi_batch_key", "sample_id"))
     n_top_genes = int(cfg.get("hvg_n_top_genes", 3000))
     seed = int(cfg.get("seed", 0))
+    backend, require_gpu = resolve_backend(cfg)
+    rsc, using_gpu = _resolve_rapids_runtime(backend=backend, require_gpu=require_gpu)
     np.random.seed(seed)
     logging.info(
-        "Pre-integration config: batch_key=%s scvi_batch_key=%s n_top_genes=%d seed=%d",
+        "Pre-integration config: batch_key=%s scvi_batch_key=%s n_top_genes=%d seed=%d backend=%s using_gpu=%s",
         batch_key,
         scvi_batch_key,
         n_top_genes,
         seed,
+        backend,
+        using_gpu,
     )
 
     ensure_obs_key(adata, "study", study)
@@ -50,19 +100,24 @@ def prepare_before_integration(adata, study: str, cfg: dict):
     ensure_obs_key(adata, batch_key, study)
     ensure_obs_key(adata, scvi_batch_key, study)
 
+    if using_gpu:
+        rsc.get.anndata_to_GPU(adata)
+        logging.info("Moved AnnData .X to GPU memory")
+
     adata.layers["counts"] = adata.X.copy()
     logging.info("Created counts layer")
 
-    sc.pp.normalize_total(adata, target_sum=1e4)
+    pp = rsc.pp if using_gpu else sc.pp
+    pp.normalize_total(adata, target_sum=1e4)
     adata.layers["normalized"] = adata.X.copy()
     logging.info("Completed normalize_total and stored normalized layer")
 
-    sc.pp.log1p(adata)
+    pp.log1p(adata)
     adata.layers["log1p"] = adata.X.copy()
     logging.info("Completed log1p and stored log1p layer")
 
     try:
-        sc.pp.highly_variable_genes(
+        pp.highly_variable_genes(
             adata,
             n_top_genes=n_top_genes,
             batch_key=batch_key,
@@ -75,7 +130,7 @@ def prepare_before_integration(adata, study: str, cfg: dict):
             "HVG with flavor=seurat_v3 failed (%s). Falling back to flavor=seurat.",
             exc,
         )
-        sc.pp.highly_variable_genes(
+        pp.highly_variable_genes(
             adata,
             n_top_genes=n_top_genes,
             batch_key=batch_key,
@@ -89,6 +144,8 @@ def prepare_before_integration(adata, study: str, cfg: dict):
         "scvi_batch_key": scvi_batch_key,
         "n_top_genes": n_top_genes,
         "seed": seed,
+        "backend": backend,
+        "used_gpu": using_gpu,
     }
 
     adata.uns["qc_preproc"]["hvg_var_names"] = adata.var_names[adata.var["highly_variable"]].tolist()
@@ -98,6 +155,9 @@ def prepare_before_integration(adata, study: str, cfg: dict):
         adata.n_vars,
         len(adata.uns["qc_preproc"]["hvg_var_names"]),
     )
+    if using_gpu:
+        rsc.get.anndata_to_CPU(adata, convert_all=True)
+        logging.info("Moved AnnData matrices and arrays back to CPU memory")
     return adata
 
 
