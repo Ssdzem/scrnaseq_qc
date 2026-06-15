@@ -45,6 +45,11 @@ integration:
   compute_pca: false
   compute_umap: false
   compute_leiden: true
+  # Backend for PCA / Harmony / neighbors / UMAP / Leiden graph steps.
+  # - "cpu": always use Scanpy / HarmonyPy CPU implementations
+  # - "gpu": require RAPIDS SingleCell implementations where available
+  # - "auto": try RAPIDS SingleCell first, otherwise fall back to CPU
+  backend: "cpu"
   # scVI/sysVI training knobs.
   scvi_max_epochs: 400
   sysvi_max_epochs: 400
@@ -71,7 +76,9 @@ integration:
     get_latent_mc_samples: 100
     plan_kwargs:
       z_distance_cycle_weight: 5.0
-  # Use GPU execution in this worktree.
+  # GPU settings for scVI/sysVI training. Set use_gpu false to force CPU;
+  # require_gpu fails fast if CUDA is unavailable. For RAPIDS graph/preprocessing
+  # steps, see integration.backend above.
   use_gpu: true
   require_gpu: true
   accelerator: "gpu"

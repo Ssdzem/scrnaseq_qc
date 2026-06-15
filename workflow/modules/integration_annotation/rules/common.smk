@@ -14,7 +14,8 @@ def _load_ia_config(path: str) -> dict:
         return {}
 
 
-IA_FULL_CFG = _load_ia_config(IA_CONFIG_PATH)
+IA_FULL_CFG = config if isinstance(config, dict) and config else _load_ia_config(IA_CONFIG_PATH)
+IA_INTEGRATION_CFG = IA_FULL_CFG.get("integration", {}) if isinstance(IA_FULL_CFG, dict) else {}
 IA_ANNOTATION_CFG = IA_FULL_CFG.get("annotation", {}) if isinstance(IA_FULL_CFG, dict) else {}
 IA_REFERENCE_CFG = IA_FULL_CFG.get("reference_atlas", {}) if isinstance(IA_FULL_CFG, dict) else {}
 
@@ -72,7 +73,7 @@ def _studies_to_process():
 
 
 def _ia_integration_method(_wildcards=None) -> str:
-    integration_cfg = IA_FULL_CFG.get("integration", {}) if isinstance(IA_FULL_CFG, dict) else {}
+    integration_cfg = IA_INTEGRATION_CFG
     if not bool(integration_cfg.get("enabled", True)):
         return "none"
     method = str(integration_cfg.get("method", integration_cfg.get("integration_method", ""))).strip().lower()
@@ -83,6 +84,27 @@ def _ia_integration_method(_wildcards=None) -> str:
             f"integration_annotation. Choose one of {sorted(valid)}; found {method!r}."
         )
     return method
+
+
+def _ia_rapids_backend() -> str:
+    raw = str(IA_INTEGRATION_CFG.get("backend", IA_INTEGRATION_CFG.get("preprocessing_backend", "cpu"))).strip().lower()
+    if raw not in {"cpu", "gpu", "auto"}:
+        raise ValueError(
+            "config/integration_annotation.yaml requires integration.backend to be one of "
+            "['cpu', 'gpu', 'auto']; found "
+            f"{raw!r}."
+        )
+    return raw
+
+
+def _ia_integrate_env() -> str:
+    accelerator = str(IA_INTEGRATION_CFG.get("accelerator", "")).strip().lower()
+    use_gpu = IA_INTEGRATION_CFG.get("use_gpu", None)
+    if isinstance(use_gpu, str):
+        use_gpu = use_gpu.strip().lower() in {"1", "true", "yes", "y", "gpu"}
+    wants_scvi_gpu = accelerator == "gpu" or bool(use_gpu)
+    wants_rapids_gpu = _ia_rapids_backend() in {"gpu", "auto"}
+    return "../env/integration_annotation_gpu_py.yaml" if (wants_scvi_gpu or wants_rapids_gpu) else "../env/integration_annotation_py.yaml"
 
 
 def _ia_log(study: str) -> str:

@@ -35,6 +35,15 @@ qc:
   # Number of HVGs used for exploratory embeddings.
   hvg_n_top_genes: 3000
 
+  # Preprocessing backend for the pre-integration Scanpy-like steps.
+  # - "cpu": always use Scanpy/NumPy on CPU
+  # - "gpu": require RAPIDS SingleCell GPU preprocessing
+  # - "auto": try RAPIDS SingleCell GPU preprocessing, otherwise fall back to CPU
+  backend: "cpu"
+
+  # If true and backend is "gpu" or "auto", fail instead of falling back when GPU is unavailable.
+  require_gpu: false
+
   # Random seed for reproducibility.
   seed: 0
 
