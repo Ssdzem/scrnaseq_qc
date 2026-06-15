@@ -414,6 +414,7 @@ def annotate(adata, cfg: dict, reference_h5ad: str = ""):
     source_col = str(cfg.get("source_column", "cell_type")).strip()
     configured_target = str(cfg.get("target_column", "")).strip()
     target_col = configured_target or _default_target_col(method)
+    legacy_alias = str(cfg.get("legacy_alias", "")).strip()
     unknown_label = str(cfg.get("unknown_label", "Unknown"))
 
     if method == "from_existing_column":
@@ -434,11 +435,15 @@ def annotate(adata, cfg: dict, reference_h5ad: str = ""):
             "Choose one of: from_existing_column, from_leiden, symphony, scanvi."
         )
 
+    if legacy_alias and legacy_alias != target_col:
+        adata.obs[legacy_alias] = adata.obs[target_col].copy()
+
     adata.uns.setdefault("integration_annotation", {})
     adata.uns["integration_annotation"]["annotation"] = {
         "method": method,
         "source_column": source_col,
         "target_column": target_col,
+        "legacy_alias": legacy_alias,
         "unknown_label": unknown_label,
         "reference_h5ad": reference_h5ad if method in REFERENCE_REQUIRED_METHODS else "",
     }

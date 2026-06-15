@@ -25,12 +25,26 @@ from cleaner_registry import CLEANER_REGISTRY, normalize_cleaner_name
 from standardize_dependencies import unpack_requires_fetch_done
 
 
+def _standardize_config_root() -> Path:
+    explicit = str(config.get("standardize_config_dir", "")).strip()
+    if explicit:
+        return Path(explicit)
+
+    profile_dir = str(config.get("profile_config_dir", "")).strip()
+    if profile_dir:
+        profile_root = Path(profile_dir) / "standardize"
+        if profile_root.exists():
+            return profile_root
+
+    return Path("config") / "standardize"
+
+
 def _spec_path_for_study(study: str) -> Path:
-    return Path("config") / "standardize" / f"{study}.yaml"
+    return _standardize_config_root() / f"{study}.yaml"
 
 
 def _studies_to_process() -> list[str]:
-    root = Path("config") / "standardize"
+    root = _standardize_config_root()
     if not root.exists():
         return []
     return sorted([p.stem for p in root.glob("*.yaml")])

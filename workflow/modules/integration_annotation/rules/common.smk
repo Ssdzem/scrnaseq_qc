@@ -3,7 +3,7 @@ from pathlib import Path
 import yaml
 
 
-IA_CONFIG_PATH = str(Path("config/integration_annotation.yaml"))
+IA_CONFIG_PATH = globals().get("IA_CONFIG_PATH", str(Path("config/integration_annotation.yaml")))
 
 
 def _load_ia_config(path: str) -> dict:
@@ -14,7 +14,7 @@ def _load_ia_config(path: str) -> dict:
         return {}
 
 
-IA_FULL_CFG = config if isinstance(config, dict) and config else _load_ia_config(IA_CONFIG_PATH)
+IA_FULL_CFG = _load_ia_config(IA_CONFIG_PATH)
 IA_INTEGRATION_CFG = IA_FULL_CFG.get("integration", {}) if isinstance(IA_FULL_CFG, dict) else {}
 IA_ANNOTATION_CFG = IA_FULL_CFG.get("annotation", {}) if isinstance(IA_FULL_CFG, dict) else {}
 IA_REFERENCE_CFG = IA_FULL_CFG.get("reference_atlas", {}) if isinstance(IA_FULL_CFG, dict) else {}

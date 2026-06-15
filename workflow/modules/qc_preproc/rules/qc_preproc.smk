@@ -2,7 +2,7 @@ from pathlib import Path
 import yaml
 
 
-QC_CONFIG_PATH = str(Path("config/qc.yaml"))
+QC_CONFIG_PATH = globals().get("QC_CONFIG_PATH", str(Path("config/qc.yaml")))
 
 
 def _load_qc_config(path: str) -> dict:
@@ -13,7 +13,7 @@ def _load_qc_config(path: str) -> dict:
         return {}
 
 
-QC_FULL_CFG = config if isinstance(config, dict) and config else _load_qc_config(QC_CONFIG_PATH)
+QC_FULL_CFG = _load_qc_config(QC_CONFIG_PATH)
 QC_CFG = QC_FULL_CFG.get("qc", {}) if isinstance(QC_FULL_CFG, dict) else {}
 
 

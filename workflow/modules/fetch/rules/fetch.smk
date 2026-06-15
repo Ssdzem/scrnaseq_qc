@@ -13,8 +13,11 @@ _project_cfg = os.path.join(workflow.basedir, "config", "fetch.yaml")
 # `workflow.basedir` can be surprising when running a module Snakefile directly,
 # so also try resolving the project config relative to CWD.
 _cwd_project_cfg = os.path.join(os.getcwd(), "config", "fetch.yaml")
+_explicit_cfg = str(config.get("fetch_config", "")).strip()
+_profile_dir = str(config.get("profile_config_dir", "")).strip()
+_profile_cfg = os.path.join(_profile_dir, "fetch.yaml") if _profile_dir else ""
 
-_candidates = [_project_cfg, _cwd_project_cfg]
+_candidates = [p for p in [_explicit_cfg, _profile_cfg, _project_cfg, _cwd_project_cfg] if p]
 _cfg = next((p for p in _candidates if os.path.exists(p)), None)
 if _cfg is None:
     raise WorkflowError(
