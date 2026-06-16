@@ -24,6 +24,12 @@ Dry-run the myeloid tier-2 profile:
 snakemake --profile profiles/lca_tier_2_gpu_sysvi_scanvi -s workflow/modules/integration_annotation/Snakefile -n -p integration_annotation_all
 ```
 
+Dry-run the a1_p2 macrophage/DC reintegration profile:
+
+```bash
+snakemake --profile profiles/newint -s workflow/modules/integration_annotation/Snakefile -n -p integration_annotation_all
+```
+
 ## Primary config
 
 ```text
@@ -49,6 +55,7 @@ Available label-transfer profiles include:
 
 - `profiles/lca_tier_1_cpu_sysvi_scanvi` — broad LCA tier-1 labels, CPU SysVI/SCANVI.
 - `profiles/lca_tier_2_gpu_sysvi_scanvi` — myeloid LCA tier-2 labels, GPU SysVI/SCANVI training.
+- `profiles/newint` — reads `../a1_p2_def/out/trimint/mac.h5ad`, reruns SysVI/SCANVI against the myeloid LCA tier-2 reference, and writes `../a1_p2_def/out/trimint/all_annotated.h5ad` for a1_p2 downstream scripts.
 
 ## Targets
 
@@ -63,6 +70,12 @@ Primary outputs:
 - `out/integration_annotation/all_studies/all_integrated.h5ad`
 - `out/integration_annotation/all_studies/all_annotated.h5ad`
 - `out/integration_annotation/all_studies/evaluation_metrics.json`
+
+With `profiles/newint`, the same target is redirected to a1_p2 paths:
+
+- `../a1_p2_def/out/trimint/all_integrated.h5ad`
+- `../a1_p2_def/out/trimint/all_annotated.h5ad`
+- `../a1_p2_def/out/trimint/evaluation_metrics.json`
 
 ### Per-study integration + annotation + evaluation
 

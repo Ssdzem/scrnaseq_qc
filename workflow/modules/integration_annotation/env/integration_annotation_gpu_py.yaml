@@ -15,9 +15,11 @@ dependencies:
   - harmonypy
   - pip
   - pip:
-      # Swap to rapids-singlecell-cu13 on CUDA 13 hosts.
-      - "--extra-index-url=https://pypi.nvidia.com"
-      - "rapids-singlecell-cu12[rapids]==0.14.1"
+      # CUDA 11.8 PyTorch wheels are compatible with NVIDIA 525-series drivers.
+      # RAPIDS is intentionally omitted because current profiles keep
+      # integration.backend="cpu" while using GPU only for scvi-tools training.
+      - "--extra-index-url=https://download.pytorch.org/whl/cu118"
+      - "torch==2.7.1+cu118"
       - "scvi-tools>=1.3"
       - "symphonypy>=0.2.1"
       - "scib"

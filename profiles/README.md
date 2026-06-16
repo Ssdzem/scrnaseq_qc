@@ -36,6 +36,10 @@ snakemake --profile profiles/lca_tier_1_cpu_sysvi_scanvi \
 snakemake --profile profiles/lca_tier_2_gpu_sysvi_scanvi \
   -s workflow/modules/integration_annotation/Snakefile \
   -n -p integration_annotation_all
+
+snakemake --profile profiles/newint \
+  -s workflow/modules/integration_annotation/Snakefile \
+  -n -p integration_annotation_all
 ```
 
 ## Current label-transfer profiles
@@ -50,3 +54,9 @@ snakemake --profile profiles/lca_tier_2_gpu_sysvi_scanvi \
   - GPU SysVI/SCANVI training settings
   - writes `obs["tier_2_cell_type"]`
   - also writes compatibility alias `obs["scanvi_predicted_cell_type"]`
+- `newint/`
+  - starts from the a1_p2 macrophage/DC trim at `../a1_p2_def/out/trimint/mac.h5ad`
+  - writes reintegration outputs back to `../a1_p2_def/out/trimint/`
+  - uses the same tier-2 myeloid Liver Cell Atlas labels and GPU SysVI/SCANVI settings
+  - downstream a1_p2 scripts can read `a1_p2_def/out/trimint/all_annotated.h5ad`
+  - helper wrapper from repo root: `python a1_p2_def/workflow/modules/trimint/scripts/newint.py --execute`
