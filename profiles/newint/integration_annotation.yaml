@@ -134,7 +134,9 @@ evaluation:
   batch_key: "sample_id"
   label_key: ""
   unknown_label: "Unknown"
-  # Extended benchmarking using scIB. Keep enabled, but evaluator records per-embedding errors instead of aborting all output.
+  # Extended scIB benchmarking is expensive on the 215k-cell macrophage/DC
+  # object, so use the large a1p2 test box aggressively instead of the default
+  # single-core evaluator.
   scib:
     enabled: true
     embeddings:
@@ -163,5 +165,5 @@ evaluation:
     clisi: true
     type: "embed"
     lisi_subsample: 0.5
-    n_cores: 1
+    n_cores: 40
     verbose: false
