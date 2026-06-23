@@ -17,7 +17,7 @@ rule figures_all:
           echo "[$(date -Is)] INPUT h5ad={input.h5ad:q}"
           echo "[$(date -Is)] INPUT metadata_csv={input.metadata_csv:q}"
           echo "[$(date -Is)] OUTPUT figures={output.figures:q}"
-          "$CONDA_PREFIX/bin/python" workflow/modules/figures/scripts/make_figures.py \
+          "$CONDA_PREFIX/bin/python" "workflow/modules/figures/scripts/make_figures.py" \
             --h5ad {input.h5ad:q} \
             --metadata-csv {input.metadata_csv:q} \
             --out-dir "out/figures" \
