@@ -55,3 +55,10 @@ inputs:
 
   # Source of truth for which study_accession values exist.
   metadata_csv: "config/liver_scRNAseq_metadata_everything.csv"
+
+resources:
+  preintegration_threads: 4
+  preintegration_mem_mb: 32000
+  preintegration_gpu: 0
+  concat_threads: 4
+  concat_mem_mb: 64000

@@ -10,11 +10,17 @@ rule ia_integrate_all:
         integration_method=_ia_integration_method,
     log:
         _ia_log("all_studies")
+    threads:
+        _ia_integrate_threads
+    resources:
+        mem_mb=_ia_integrate_mem_mb,
+        gpu=_ia_integrate_gpu,
     conda:
         _ia_integrate_env()
     shell:
         r"""
         mkdir -p $(dirname {log})
+        A1_P1_IA_NUM_THREADS={threads} OMP_NUM_THREADS={threads} OPENBLAS_NUM_THREADS={threads} MKL_NUM_THREADS={threads} \
         PYTHONNOUSERSITE=1 $CONDA_PREFIX/bin/python -s workflow/modules/integration_annotation/scripts/integrate_embeddings.py \
           --scope all_studies \
           --input {input.pre_integration} \
@@ -40,11 +46,17 @@ rule ia_integrate_study:
         integration_method=_ia_integration_method,
     log:
         _ia_log("{study}")
+    threads:
+        _ia_integrate_threads
+    resources:
+        mem_mb=_ia_integrate_mem_mb,
+        gpu=_ia_integrate_gpu,
     conda:
         _ia_integrate_env()
     shell:
         r"""
         mkdir -p $(dirname {log})
+        A1_P1_IA_NUM_THREADS={threads} OMP_NUM_THREADS={threads} OPENBLAS_NUM_THREADS={threads} MKL_NUM_THREADS={threads} \
         PYTHONNOUSERSITE=1 $CONDA_PREFIX/bin/python -s workflow/modules/integration_annotation/scripts/integrate_embeddings.py \
           --scope study \
           --study {params.study} \

@@ -1,6 +1,7 @@
 import argparse
 import json
 import logging
+import os
 from pathlib import Path
 
 import numpy as np
@@ -106,7 +107,7 @@ def _compute_scib_for_embedding(adata, batch_key: str, label_key: str, embed_key
         "ilisi_": bool(cfg.get("ilisi", True)),
         "clisi_": bool(cfg.get("clisi", True)),
         "subsample": float(cfg.get("lisi_subsample", 0.5)),
-        "n_cores": int(cfg.get("n_cores", 1)),
+        "n_cores": int(os.environ.get("A1_P1_IA_EVAL_THREADS", cfg.get("n_cores", 1))),
         "type_": str(cfg.get("type", "embed")),
         "verbose": bool(cfg.get("verbose", False)),
     }

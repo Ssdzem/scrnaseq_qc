@@ -167,3 +167,13 @@ evaluation:
     lisi_subsample: 0.5
     n_cores: 40
     verbose: false
+
+resources:
+  integration_threads: 16
+  integration_mem_mb: 128000
+  integration_gpu: 1
+  annotation_threads: 8
+  annotation_mem_mb: 96000
+  annotation_gpu: 1
+  evaluation_threads: 40
+  evaluation_mem_mb: 128000

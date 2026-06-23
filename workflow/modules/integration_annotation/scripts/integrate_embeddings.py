@@ -1,6 +1,7 @@
 import argparse
 import json
 import logging
+import os
 from pathlib import Path
 
 import anndata as ad
@@ -246,7 +247,7 @@ def run_integration(adata, cfg: dict, scope_label: str):
     early_stopping_monitor = str(cfg.get("early_stopping_monitor", "elbo_validation"))
     early_stopping_patience = int(cfg.get("early_stopping_patience", 20))
     dl_num_workers = int(cfg.get("dl_num_workers", 4))
-    num_threads = int(cfg.get("num_threads", 16))
+    num_threads = int(os.environ.get("A1_P1_IA_NUM_THREADS", cfg.get("num_threads", 16)))
     use_gpu = _as_bool(cfg.get("use_gpu", False))
     require_gpu = _as_bool(cfg.get("require_gpu", False))
     accelerator = str(cfg.get("accelerator", "gpu" if use_gpu else "cpu")).strip().lower()

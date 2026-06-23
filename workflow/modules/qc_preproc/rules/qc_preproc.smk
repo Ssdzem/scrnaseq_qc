@@ -15,6 +15,7 @@ def _load_qc_config(path: str) -> dict:
 
 QC_FULL_CFG = _load_qc_config(QC_CONFIG_PATH)
 QC_CFG = QC_FULL_CFG.get("qc", {}) if isinstance(QC_FULL_CFG, dict) else {}
+QC_RESOURCES_CFG = (QC_FULL_CFG.get("resources", {}) if isinstance(QC_FULL_CFG, dict) else {}) or {}
 
 
 def _qc_backend() -> str:
@@ -29,6 +30,37 @@ def _qc_backend() -> str:
 
 def _qc_preintegration_env() -> str:
     return "../env/qc_preproc_gpu_py.yaml" if _qc_backend() in {"gpu", "auto"} else "../env/qc_preproc_py.yaml"
+
+
+def _resource_int(key: str, default: int, *, minimum: int = 1) -> int:
+    value = QC_RESOURCES_CFG.get(key, default)
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"qc resources.{key} must be an integer, found {value!r}") from exc
+    if parsed < minimum:
+        raise ValueError(f"qc resources.{key} must be >= {minimum}, found {value!r}")
+    return parsed
+
+
+def _qc_preintegration_threads(_wildcards=None) -> int:
+    return _resource_int("preintegration_threads", 4, minimum=1)
+
+
+def _qc_preintegration_mem_mb(_wildcards=None) -> int:
+    return _resource_int("preintegration_mem_mb", 64000 if _qc_backend() in {"gpu", "auto"} else 32000, minimum=1)
+
+
+def _qc_preintegration_gpu(_wildcards=None) -> int:
+    return _resource_int("preintegration_gpu", 1 if _qc_backend() in {"gpu", "auto"} else 0, minimum=0)
+
+
+def _qc_concat_threads(_wildcards=None) -> int:
+    return _resource_int("concat_threads", 4, minimum=1)
+
+
+def _qc_concat_mem_mb(_wildcards=None) -> int:
+    return _resource_int("concat_mem_mb", 64000, minimum=1)
 
 
 def _studies_to_process():
@@ -167,6 +199,11 @@ rule qc_study_pre_integration:
         study=lambda wc: wc.study,
     log:
         _qc_log("{study}")
+    threads:
+        _qc_preintegration_threads
+    resources:
+        mem_mb=_qc_preintegration_mem_mb,
+        gpu=_qc_preintegration_gpu,
     conda:
         _qc_preintegration_env()
     shell:
@@ -178,6 +215,7 @@ rule qc_study_pre_integration:
           echo "[$(date -Is)] INPUT qc_config={input.qc_config}"
           echo "[$(date -Is)] INPUT pretrim_done={input.pretrim_done}"
           echo "[$(date -Is)] OUTPUT pre_integration_h5={output.pre_integration_h5}"
+          OMP_NUM_THREADS={threads} OPENBLAS_NUM_THREADS={threads} MKL_NUM_THREADS={threads} \
           $CONDA_PREFIX/bin/python workflow/modules/qc_preproc/scripts/explore_scanpy.py \
           --mode pre \
           --study {params.study} \
@@ -197,6 +235,10 @@ rule qc_concat_all_raw:
         done=touch("out/all_studies/.all_raw_done"),
     log:
         _qc_log("all_studies")
+    threads:
+        _qc_concat_threads
+    resources:
+        mem_mb=_qc_concat_mem_mb,
     conda:
         "../env/qc_preproc_py.yaml"
     shell:
@@ -208,6 +250,7 @@ rule qc_concat_all_raw:
           echo "[$(date -Is)] INPUT qc_config={input.qc_config}"
           echo "[$(date -Is)] INPUT h5ads={input.h5ads}"
           echo "[$(date -Is)] OUTPUT all_raw={output.all_raw}"
+          OMP_NUM_THREADS={threads} OPENBLAS_NUM_THREADS={threads} MKL_NUM_THREADS={threads} \
           $CONDA_PREFIX/bin/python workflow/modules/qc_preproc/scripts/concat_raw.py \
           --inputs {input.h5ads} \
           --output {output.all_raw}
@@ -225,6 +268,11 @@ rule qc_all_pre_integration:
         done=touch("out/all_studies/.all_pre_integration_done"),
     log:
         _qc_log("all_studies")
+    threads:
+        _qc_preintegration_threads
+    resources:
+        mem_mb=_qc_preintegration_mem_mb,
+        gpu=_qc_preintegration_gpu,
     conda:
         _qc_preintegration_env()
     shell:
@@ -236,6 +284,7 @@ rule qc_all_pre_integration:
           echo "[$(date -Is)] INPUT qc_config={input.qc_config}"
           echo "[$(date -Is)] INPUT all_raw_done={input.all_raw_done}"
           echo "[$(date -Is)] OUTPUT all_pre_integration={output.all_pre_integration}"
+          OMP_NUM_THREADS={threads} OPENBLAS_NUM_THREADS={threads} MKL_NUM_THREADS={threads} \
           $CONDA_PREFIX/bin/python workflow/modules/qc_preproc/scripts/explore_scanpy.py \
           --mode pre \
           --study all_studies \

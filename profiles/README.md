@@ -1,23 +1,21 @@
-# Snakemake profiles and profile-local module configs
+# a1_p1_qc Snakemake profiles
 
-Profiles are reproducible run presets. The default/template YAMLs stay under
-`config/`. A profile can override any module config by placing a YAML with the
-same filename under that profile directory.
+Profiles are run presets: cores, conda, rerun policy, and optional module-local config overrides.
 
-Resolution order for module configs is:
+## Config lookup
 
-1. explicit Snakemake config key, e.g. `--config integration_annotation_config=...`
-2. `profiles/<profile>/MODULE.yaml` when the profile sets `profile_config_dir`
-3. `config/MODULE.yaml`
+Module config resolution order:
 
-For standardization specs, a profile can override the whole study-spec directory
-with `profiles/<profile>/standardize/*.yaml`; otherwise `config/standardize/*.yaml`
-is used.
+1. explicit `--config <module>_config=<path>`;
+2. `profiles/<profile>/<module>.yaml` when `profile_config_dir` is set;
+3. `config/<module>.yaml`.
 
-Each profile `config.yaml` should point back to its directory:
+Standardization specs can also be overridden with `profiles/<profile>/standardize/*.yaml` or `--config standardize_config_dir=<dir>`.
+
+## Required profile shape
 
 ```yaml
-cores: 1
+cores: <max threads this profile should allow>
 printshellcmds: true
 rerun-incomplete: true
 keep-going: true
@@ -26,37 +24,17 @@ config:
   - profile_config_dir=profiles/<profile-name>
 ```
 
-Example dry-runs from `a1_p1_qc/`:
+## Current profiles
+
+- `local/`: safe local defaults; falls back to `config/*.yaml`.
+- `lca_tier_1_cpu_sysvi_scanvi/`: 16-core CPU tier-1 labels; writes `tier_1_cell_type`.
+- `lca_tier_2_gpu_sysvi_scanvi/`: 16-core + 1-GPU tier-2 labels; writes `tier_2_cell_type`.
+- `newint/`: 40-core + 1-GPU a1_p2 macrophage/DC reintegration; reads `../a1_p2_def/out/trimint/mac.h5ad` and writes back to `../a1_p2_def/out/trimint/`.
+
+## Example
 
 ```bash
-snakemake --profile profiles/lca_tier_1_cpu_sysvi_scanvi \
-  -s workflow/modules/integration_annotation/Snakefile \
-  -n -p integration_annotation_all
-
 snakemake --profile profiles/lca_tier_2_gpu_sysvi_scanvi \
   -s workflow/modules/integration_annotation/Snakefile \
   -n -p integration_annotation_all
-
-snakemake --profile profiles/newint \
-  -s workflow/modules/integration_annotation/Snakefile \
-  -n -p integration_annotation_all
 ```
-
-## Current label-transfer profiles
-
-- `lca_tier_1_cpu_sysvi_scanvi/`
-  - broad Liver Cell Atlas labels from `annot_humanAll.csv`
-  - CPU SysVI/SCANVI settings
-  - writes `obs["tier_1_cell_type"]`
-  - also writes compatibility alias `obs["scanvi_pred"]`
-- `lca_tier_2_gpu_sysvi_scanvi/`
-  - myeloid Liver Cell Atlas labels from `annot_humanMyeloid.csv`
-  - GPU SysVI/SCANVI training settings
-  - writes `obs["tier_2_cell_type"]`
-  - also writes compatibility alias `obs["scanvi_predicted_cell_type"]`
-- `newint/`
-  - starts from the a1_p2 macrophage/DC trim at `../a1_p2_def/out/trimint/mac.h5ad`
-  - writes reintegration outputs back to `../a1_p2_def/out/trimint/`
-  - uses the same tier-2 myeloid Liver Cell Atlas labels and GPU SysVI/SCANVI settings
-  - downstream a1_p2 scripts can read `a1_p2_def/out/trimint/all_annotated.h5ad`
-  - helper wrapper from repo root: `python a1_p2_def/workflow/modules/trimint/scripts/newint.py --execute`

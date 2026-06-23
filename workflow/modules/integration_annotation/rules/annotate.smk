@@ -12,11 +12,17 @@ rule ia_annotate_all:
         reference_h5ad=IA_REFERENCE_H5AD,
     log:
         _ia_log("all_studies")
+    threads:
+        _ia_annotate_threads
+    resources:
+        mem_mb=_ia_annotate_mem_mb,
+        gpu=_ia_annotate_gpu,
     conda:
         _ia_annotate_env()
     shell:
         r"""
         mkdir -p $(dirname {log})
+        OMP_NUM_THREADS={threads} OPENBLAS_NUM_THREADS={threads} MKL_NUM_THREADS={threads} \
         PYTHONNOUSERSITE=1 $CONDA_PREFIX/bin/python -s workflow/modules/integration_annotation/scripts/annotate_cells.py \
           --scope all_studies \
           --input {input.integrated} \
@@ -45,11 +51,17 @@ rule ia_annotate_study:
         reference_h5ad=IA_REFERENCE_H5AD,
     log:
         _ia_log("{study}")
+    threads:
+        _ia_annotate_threads
+    resources:
+        mem_mb=_ia_annotate_mem_mb,
+        gpu=_ia_annotate_gpu,
     conda:
         _ia_annotate_env()
     shell:
         r"""
         mkdir -p $(dirname {log})
+        OMP_NUM_THREADS={threads} OPENBLAS_NUM_THREADS={threads} MKL_NUM_THREADS={threads} \
         PYTHONNOUSERSITE=1 $CONDA_PREFIX/bin/python -s workflow/modules/integration_annotation/scripts/annotate_cells.py \
           --scope study \
           --study {params.study} \

@@ -260,6 +260,8 @@ rule celescope_count:
         f"{OUT_ROOT}/logs/fastq_prepros/celescope_count/{{study}}_{{donor_id}}_{{sample_id}}_{{target_id}}.log",
     conda:
         "../env/fastq_prepros.yaml"
+    threads:
+        CELESCOPE_THREADS
     resources:
         mem_mb=CELESCOPE_MEM_GB * 1024,
     shell:

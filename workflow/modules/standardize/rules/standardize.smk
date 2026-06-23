@@ -149,20 +149,52 @@ def _workers_for_study(study: str) -> int:
     env_workers = os.getenv("A1_P1_STANDARDIZE_WORKERS")
     if env_workers is not None and str(env_workers).strip():
         try:
-            return max(1, int(env_workers))
+            workers = int(env_workers)
         except ValueError as exc:
             raise WorkflowError("A1_P1_STANDARDIZE_WORKERS must be an integer >= 1") from exc
+        if workers < 1:
+            raise WorkflowError("A1_P1_STANDARDIZE_WORKERS must be an integer >= 1")
+        return workers
 
     spec = _load_spec(study)
     inp = spec.get("input") or {}
     spec_workers = inp.get("workers")
     if spec_workers is not None:
         try:
-            return max(1, int(spec_workers))
+            workers = int(spec_workers)
         except (TypeError, ValueError) as exc:
             raise WorkflowError(f"input.workers in config/standardize/{study}.yaml must be an integer >= 1") from exc
+        if workers < 1:
+            raise WorkflowError(f"input.workers in config/standardize/{study}.yaml must be an integer >= 1")
+        return workers
 
     return 1
+
+
+def _mem_mb_for_study(study: str) -> int:
+    env_mem = os.getenv("A1_P1_STANDARDIZE_MEM_MB")
+    if env_mem is not None and str(env_mem).strip():
+        try:
+            mem_mb = int(env_mem)
+        except ValueError as exc:
+            raise WorkflowError("A1_P1_STANDARDIZE_MEM_MB must be an integer >= 1") from exc
+        if mem_mb < 1:
+            raise WorkflowError("A1_P1_STANDARDIZE_MEM_MB must be an integer >= 1")
+        return mem_mb
+
+    spec = _load_spec(study)
+    inp = spec.get("input") or {}
+    spec_mem = inp.get("mem_mb")
+    if spec_mem is not None:
+        try:
+            mem_mb = int(spec_mem)
+        except (TypeError, ValueError) as exc:
+            raise WorkflowError(f"input.mem_mb in config/standardize/{study}.yaml must be an integer >= 1") from exc
+        if mem_mb < 1:
+            raise WorkflowError(f"input.mem_mb in config/standardize/{study}.yaml must be an integer >= 1")
+        return mem_mb
+
+    return 32000
 
 
 STUDIES = _studies_to_process()
@@ -233,6 +265,8 @@ rule standardize_study_py:
         "out/logs/standardize/{study}.log"
     threads:
         lambda wc: _workers_for_study(wc.study)
+    resources:
+        mem_mb=lambda wc: _mem_mb_for_study(wc.study)
     conda:
         "../env/standardize_py.yaml"
     shell:
@@ -263,6 +297,8 @@ rule standardize_study_r:
         "out/logs/standardize/{study}.log"
     threads:
         lambda wc: _workers_for_study(wc.study)
+    resources:
+        mem_mb=lambda wc: _mem_mb_for_study(wc.study)
     conda:
         "../env/standardize_r.yaml"
     shell:

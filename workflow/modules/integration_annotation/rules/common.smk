@@ -20,6 +20,7 @@ IA_ANNOTATION_CFG = IA_FULL_CFG.get("annotation", {}) if isinstance(IA_FULL_CFG,
 IA_REFERENCE_CFG = IA_FULL_CFG.get("reference_atlas", {}) if isinstance(IA_FULL_CFG, dict) else {}
 IA_INPUTS_CFG = (IA_FULL_CFG.get("inputs", {}) if isinstance(IA_FULL_CFG, dict) else {}) or {}
 IA_OUTPUTS_CFG = (IA_FULL_CFG.get("outputs", {}) if isinstance(IA_FULL_CFG, dict) else {}) or {}
+IA_RESOURCES_CFG = (IA_FULL_CFG.get("resources", {}) if isinstance(IA_FULL_CFG, dict) else {}) or {}
 
 
 def _ia_reference_h5ad() -> str:
@@ -145,6 +146,70 @@ def _ia_annotate_env() -> str:
         use_gpu = use_gpu.strip().lower() in {"1", "true", "yes", "y", "gpu"}
     wants_scanvi_gpu = method == "scanvi" and (accelerator == "gpu" or bool(use_gpu))
     return "../env/integration_annotation_gpu_py.yaml" if wants_scanvi_gpu else "../env/integration_annotation_py.yaml"
+
+
+def _resource_int(key: str, default: int, *, minimum: int = 1) -> int:
+    value = IA_RESOURCES_CFG.get(key, default)
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"integration_annotation resources.{key} must be an integer, found {value!r}") from exc
+    if parsed < minimum:
+        raise ValueError(f"integration_annotation resources.{key} must be >= {minimum}, found {value!r}")
+    return parsed
+
+
+def _as_bool(value) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"1", "true", "yes", "y", "gpu"}
+
+
+def _integration_wants_gpu() -> bool:
+    accelerator = str(IA_INTEGRATION_CFG.get("accelerator", "")).strip().lower()
+    return accelerator == "gpu" or _as_bool(IA_INTEGRATION_CFG.get("use_gpu", False)) or _ia_rapids_backend() in {"gpu", "auto"}
+
+
+def _annotation_wants_gpu() -> bool:
+    method = str(IA_ANNOTATION_CFG.get("method", "")).strip().lower()
+    scanvi_cfg = IA_ANNOTATION_CFG.get("scanvi", {}) if isinstance(IA_ANNOTATION_CFG, dict) else {}
+    accelerator = str(scanvi_cfg.get("accelerator", "")).strip().lower()
+    return method == "scanvi" and (accelerator == "gpu" or _as_bool(scanvi_cfg.get("use_gpu", False)))
+
+
+def _ia_integrate_threads(_wildcards=None) -> int:
+    return _resource_int("integration_threads", int(IA_INTEGRATION_CFG.get("num_threads", 1)), minimum=1)
+
+
+def _ia_annotate_threads(_wildcards=None) -> int:
+    scanvi_cfg = IA_ANNOTATION_CFG.get("scanvi", {}) if isinstance(IA_ANNOTATION_CFG, dict) else {}
+    return _resource_int("annotation_threads", int(scanvi_cfg.get("num_threads", 1)), minimum=1)
+
+
+def _ia_evaluate_threads(_wildcards=None) -> int:
+    eval_cfg = IA_FULL_CFG.get("evaluation", {}) if isinstance(IA_FULL_CFG, dict) else {}
+    scib_cfg = eval_cfg.get("scib", {}) if isinstance(eval_cfg, dict) else {}
+    return _resource_int("evaluation_threads", int(scib_cfg.get("n_cores", 1)), minimum=1)
+
+
+def _ia_integrate_mem_mb(_wildcards=None) -> int:
+    return _resource_int("integration_mem_mb", 128000 if _integration_wants_gpu() else 64000, minimum=1)
+
+
+def _ia_annotate_mem_mb(_wildcards=None) -> int:
+    return _resource_int("annotation_mem_mb", 96000 if _annotation_wants_gpu() else 48000, minimum=1)
+
+
+def _ia_evaluate_mem_mb(_wildcards=None) -> int:
+    return _resource_int("evaluation_mem_mb", 64000, minimum=1)
+
+
+def _ia_integrate_gpu(_wildcards=None) -> int:
+    return _resource_int("integration_gpu", 1 if _integration_wants_gpu() else 0, minimum=0)
+
+
+def _ia_annotate_gpu(_wildcards=None) -> int:
+    return _resource_int("annotation_gpu", 1 if _annotation_wants_gpu() else 0, minimum=0)
 
 
 def _ia_log(study: str) -> str:

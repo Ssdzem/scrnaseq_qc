@@ -9,11 +9,16 @@ rule ia_evaluate_all:
         done=touch(f"{IA_ALL_OUTPUT_DIR}/.evaluated_done"),
     log:
         _ia_log("all_studies")
+    threads:
+        _ia_evaluate_threads
+    resources:
+        mem_mb=_ia_evaluate_mem_mb,
     conda:
         "../env/integration_annotation_py.yaml"
     shell:
         r"""
         mkdir -p $(dirname {log})
+        A1_P1_IA_EVAL_THREADS={threads} OMP_NUM_THREADS={threads} OPENBLAS_NUM_THREADS={threads} MKL_NUM_THREADS={threads} \
         PYTHONNOUSERSITE=1 $CONDA_PREFIX/bin/python -s workflow/modules/integration_annotation/scripts/evaluate_integration.py \
           --scope all_studies \
           --input {input.annotated} \
@@ -39,11 +44,16 @@ rule ia_evaluate_study:
         study=lambda wc: wc.study,
     log:
         _ia_log("{study}")
+    threads:
+        _ia_evaluate_threads
+    resources:
+        mem_mb=_ia_evaluate_mem_mb,
     conda:
         "../env/integration_annotation_py.yaml"
     shell:
         r"""
         mkdir -p $(dirname {log})
+        A1_P1_IA_EVAL_THREADS={threads} OMP_NUM_THREADS={threads} OPENBLAS_NUM_THREADS={threads} MKL_NUM_THREADS={threads} \
         PYTHONNOUSERSITE=1 $CONDA_PREFIX/bin/python -s workflow/modules/integration_annotation/scripts/evaluate_integration.py \
           --scope study \
           --study {params.study} \
