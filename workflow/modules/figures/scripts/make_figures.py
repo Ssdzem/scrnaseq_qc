@@ -63,8 +63,8 @@ FIGURES: tuple[FigureSpec, ...] = (
         filename="04_cell_type_study_composition.png",
         legacy_reference="annotate-2026-06-22_20-14-33.png",
         title="Cell-type composition by study accession",
-        source_object="integration_annotation H5AD: cell-type label column + .obs['study_accession']",
-        structure="cell-level AnnData obs cross-tabulated by label and study",
+        source_object="integration_annotation H5AD: .obs['tier_1_cell_type'] + .obs['study_accession']",
+        structure="cell-level AnnData obs cross-tabulated by canonical tier_1_cell_type and study_accession",
         represents="Within-cell-type study contribution proportions, exposing study-specific composition biases.",
         pipeline_position="After annotation labels are assigned to the integrated object.",
     ),
@@ -90,9 +90,22 @@ def _read_h5ad_backed(path: Path):
     return ad.read_h5ad(path, backed="r")
 
 
-def _as_bool_series(series):
+TRUE_VALUES = {"true", "1", "yes", "y", "t"}
+FALSE_VALUES = {"false", "0", "no", "n", "f"}
+
+
+def _as_bool_series(series, *, label: str = "boolean field"):
+    if str(series.dtype) == "bool":
+        if series.isna().any():
+            raise ValueError(f"{label} contains missing boolean values")
+        return series
     lowered = series.astype("string").str.strip().str.lower()
-    return lowered.isin({"true", "1", "yes", "y", "t"})
+    missing = lowered.isna() | lowered.eq("")
+    unknown = ~(lowered.isin(TRUE_VALUES | FALSE_VALUES)) & ~missing
+    if bool(missing.any()) or bool(unknown.any()):
+        examples = sorted(lowered[unknown].dropna().unique().tolist())[:5]
+        raise ValueError(f"{label} contains missing or unknown boolean values: {examples}")
+    return lowered.isin(TRUE_VALUES)
 
 
 def _choose_column(columns: Iterable[str], candidates: Sequence[str], purpose: str) -> str:
@@ -133,7 +146,7 @@ def _load_metadata_counts(metadata_csv: Path, group_col: str, pd):
     meta = pd.read_csv(metadata_csv)
     if "sample_id" not in meta.columns or group_col not in meta.columns or "include" not in meta.columns:
         raise KeyError(f"{metadata_csv} must contain sample_id, include, and {group_col}")
-    meta = meta.loc[_as_bool_series(meta["include"])].copy()
+    meta = meta.loc[_as_bool_series(meta["include"], label="metadata include")].copy()
     if meta.empty:
         raise ValueError(f"{metadata_csv} has no include-truthy rows for {group_col}")
     counts = (
@@ -180,7 +193,7 @@ def _save_bar_with_labels(df, *, x_col: str, y_col: str, title: str, xlabel: str
 def plot_umap_study_accession(args: argparse.Namespace, spec: FigureSpec) -> Path:
     np, pd, plt = _import_plotting()
     obs, umap = _load_obs_umap(args.h5ad)
-    study_col = _choose_column(obs.columns, ["study_accession", "study", "dataset"], "study accession")
+    study_col = _choose_column(obs.columns, ["study_accession"], "canonical study_accession")
     categories = sorted(obs[study_col].astype("string").fillna("NA").unique())
     palette = plt.get_cmap("tab10")
 
@@ -250,12 +263,8 @@ def plot_unique_samples_by_study(args: argparse.Namespace, spec: FigureSpec) -> 
 def plot_cell_type_study_composition(args: argparse.Namespace, spec: FigureSpec) -> Path:
     _np, pd, plt = _import_plotting()
     obs, _umap = _load_obs_umap(args.h5ad)
-    label_col = _choose_column(
-        obs.columns,
-        ["scanvi_pred", "tier_1_cell_type", "scanvi_predicted_cell_type", "cell_type", "annot"],
-        "cell-type label",
-    )
-    study_col = _choose_column(obs.columns, ["study_accession", "study", "dataset"], "study accession")
+    label_col = _choose_column(obs.columns, ["tier_1_cell_type"], "canonical tier_1_cell_type")
+    study_col = _choose_column(obs.columns, ["study_accession"], "canonical study_accession")
     work = obs[[label_col, study_col]].dropna().copy()
     work[label_col] = work[label_col].astype(str)
     work[study_col] = work[study_col].astype(str)
@@ -289,7 +298,12 @@ def _write_manifest(args: argparse.Namespace, outputs: list[Path]) -> Path:
         "out_dir": str(args.out_dir),
         "h5ad": str(args.h5ad),
         "metadata_csv": str(args.metadata_csv),
-        "metadata_filter": "include column truthy: true/1/yes/y/t",
+        "metadata_filter": "include column strict boolean: true/1/yes/y/t or false/0/no/n/f",
+        "source_contracts": {
+            "study_column": "study_accession",
+            "cell_type_column": "tier_1_cell_type",
+            "metadata_required_columns": ["sample_id", "include", "fibrosis_stage", "study_accession"],
+        },
         "figures": [
             {
                 **asdict(spec),
