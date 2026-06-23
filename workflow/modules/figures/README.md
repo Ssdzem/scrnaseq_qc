@@ -8,16 +8,19 @@ Run from `a1_p1_qc/` with Snakemake target `figures_all`, or run the script:
 
 ```bash
 python workflow/modules/figures/scripts/make_figures.py \
-  --h5ad out/integration_annotation/all_studies/myeloid.h5ad \
+  --h5ad out/integration_annotation/all_studies/all_annotated.h5ad \
   --metadata-csv config/liver_scRNAseq_metadata_everything.csv
 ```
 
 Ordered figures:
 
 1. `01_umap_study_accession.png` — cell-level UMAP from `.obsm['X_umap']`, colored by `.obs['study_accession']`.
-2. `02_unique_samples_by_fibrosis_stage.png` — unique sample counts by fibrosis stage from metadata summaries or metadata CSV.
+2. `02_unique_samples_by_fibrosis_stage.png` — unique sample counts by fibrosis stage from the declared metadata CSV.
 3. `03_unique_samples_by_study_accession.png` — unique sample counts by study accession.
 4. `04_cell_type_study_composition.png` — cell-type-by-study composition from the annotated H5AD obs table.
 
-The H5AD object is downstream of integration/annotation; metadata summaries are
-cohort diagnostics derived from the configured metadata table.
+The default H5AD object is the canonical all-study integration/annotation handoff
+(`out/integration_annotation/all_studies/all_annotated.h5ad`). Override
+`figures.h5ad` in Snakemake config or pass `--h5ad` directly only when a
+different annotated object is intentionally being reviewed. Metadata cohort
+diagnostics are derived from the declared metadata CSV input.

@@ -43,7 +43,7 @@ FIGURES: tuple[FigureSpec, ...] = (
         filename="02_unique_samples_by_fibrosis_stage.png",
         legacy_reference="annotate-2026-06-22_20-13-36.png",
         title="Unique samples by fibrosis stage",
-        source_object="metadata summary CSV or config/liver_scRNAseq_metadata_everything.csv",
+        source_object="configured metadata CSV: config/liver_scRNAseq_metadata_everything.csv",
         structure="sample-level metadata table grouped by fibrosis_stage",
         represents="Number of distinct samples per fibrosis stage.",
         pipeline_position="Metadata summary / cohort composition diagnostic.",
@@ -53,7 +53,7 @@ FIGURES: tuple[FigureSpec, ...] = (
         filename="03_unique_samples_by_study_accession.png",
         legacy_reference="annotate-2026-06-22_20-13-55.png",
         title="Unique samples by study accession",
-        source_object="metadata summary CSV or config/liver_scRNAseq_metadata_everything.csv",
+        source_object="configured metadata CSV: config/liver_scRNAseq_metadata_everything.csv",
         structure="sample-level metadata table grouped by study_accession",
         represents="Number of distinct samples contributed by each study accession.",
         pipeline_position="Metadata summary / cohort composition diagnostic.",
@@ -127,16 +127,9 @@ def _load_obs_umap(h5ad_path: Path):
         _close_h5ad(adata)
 
 
-def _load_metadata_counts(summary_path: Path, metadata_csv: Path, group_col: str, pd):
-    if summary_path.exists():
-        summary = pd.read_csv(summary_path)
-        if group_col in summary.columns and "unique_sample_count" in summary.columns:
-            return summary[[group_col, "unique_sample_count"]].copy()
-
+def _load_metadata_counts(metadata_csv: Path, group_col: str, pd):
     if not metadata_csv.exists():
-        raise FileNotFoundError(
-            f"Neither summary {summary_path} nor metadata source {metadata_csv} exists"
-        )
+        raise FileNotFoundError(f"Metadata source not found: {metadata_csv}")
     meta = pd.read_csv(metadata_csv)
     if "sample_id" not in meta.columns or group_col not in meta.columns:
         raise KeyError(f"{metadata_csv} must contain sample_id and {group_col}")
@@ -215,7 +208,7 @@ def plot_umap_study_accession(args: argparse.Namespace, spec: FigureSpec) -> Pat
 
 def plot_unique_samples_by_fibrosis(args: argparse.Namespace, spec: FigureSpec) -> Path:
     _np, pd, _plt = _import_plotting()
-    df = _load_metadata_counts(args.fibrosis_summary, args.metadata_csv, "fibrosis_stage", pd)
+    df = _load_metadata_counts(args.metadata_csv, "fibrosis_stage", pd)
     order = ["F0", "F1", "F2", "F3", "F4"]
     df["_order"] = df["fibrosis_stage"].astype(str).map({v: i for i, v in enumerate(order)}).fillna(999)
     df = df.sort_values(["_order", "fibrosis_stage"]).drop(columns="_order")
@@ -235,7 +228,7 @@ def plot_unique_samples_by_fibrosis(args: argparse.Namespace, spec: FigureSpec) 
 
 def plot_unique_samples_by_study(args: argparse.Namespace, spec: FigureSpec) -> Path:
     _np, pd, _plt = _import_plotting()
-    df = _load_metadata_counts(args.study_summary, args.metadata_csv, "study_accession", pd)
+    df = _load_metadata_counts(args.metadata_csv, "study_accession", pd)
     df = df.sort_values("unique_sample_count", ascending=False)
     out = args.out_dir / spec.filename
     _save_bar_with_labels(
@@ -309,18 +302,12 @@ def _write_manifest(args: argparse.Namespace, outputs: list[Path]) -> Path:
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--h5ad", type=Path, default=Path("out/integration_annotation/all_studies/myeloid.h5ad"))
+    parser.add_argument(
+        "--h5ad",
+        type=Path,
+        default=Path("out/integration_annotation/all_studies/all_annotated.h5ad"),
+    )
     parser.add_argument("--metadata-csv", type=Path, default=Path("config/liver_scRNAseq_metadata_everything.csv"))
-    parser.add_argument(
-        "--fibrosis-summary",
-        type=Path,
-        default=Path("out/metadata_summary/unique_samples_by_fibrosis_stage.csv"),
-    )
-    parser.add_argument(
-        "--study-summary",
-        type=Path,
-        default=Path("out/metadata_summary/unique_samples_by_study_accession.csv"),
-    )
     parser.add_argument("--out-dir", type=Path, default=Path("out/figures"))
     parser.add_argument("--manifest", type=Path, default=Path("out/figures/manifest.json"))
     parser.add_argument("--only", type=int, choices=[spec.order for spec in FIGURES], action="append")

@@ -1,7 +1,5 @@
 # Snakefile for reproducible top-level a1_p1_qc figures.
 
-from pathlib import Path
-
 
 def _figures_cfg() -> dict:
     cfg = config.get("figures", {}) if isinstance(config, dict) else {}
@@ -12,14 +10,7 @@ def _figures_h5ad() -> str:
     explicit = str(_figures_cfg().get("h5ad", "")).strip()
     if explicit:
         return explicit
-    candidates = [
-        Path("out/integration_annotation/all_studies/myeloid.h5ad"),
-        Path("out/integration_annotation/all_studies/all_annotated.h5ad"),
-    ]
-    for candidate in candidates:
-        if candidate.exists():
-            return str(candidate)
-    return str(candidates[-1])
+    return "out/integration_annotation/all_studies/all_annotated.h5ad"
 
 
 P1_FIGURE_OUTPUTS = [

@@ -11,16 +11,16 @@ rule figures_all:
         "../../exploration/env/a1p2def.yaml"
     shell:
         r"""
-        mkdir -p $(dirname {log})
+        mkdir -p "$(dirname {log:q})"
         {{
           echo "[$(date -Is)] [figures_all]"
-          echo "[$(date -Is)] INPUT h5ad={input.h5ad}"
-          echo "[$(date -Is)] INPUT metadata_csv={input.metadata_csv}"
-          echo "[$(date -Is)] OUTPUT figures={output.figures}"
+          echo "[$(date -Is)] INPUT h5ad={input.h5ad:q}"
+          echo "[$(date -Is)] INPUT metadata_csv={input.metadata_csv:q}"
+          echo "[$(date -Is)] OUTPUT figures={output.figures:q}"
           $CONDA_PREFIX/bin/python workflow/modules/figures/scripts/make_figures.py \
-            --h5ad {input.h5ad} \
-            --metadata-csv {input.metadata_csv} \
-            --out-dir out/figures \
-            --manifest out/figures/manifest.json
-        }} 2>&1 | tee -a {log}
+            --h5ad {input.h5ad:q} \
+            --metadata-csv {input.metadata_csv:q} \
+            --out-dir "out/figures" \
+            --manifest "out/figures/manifest.json"
+        }} 2>&1 | tee -a {log:q}
         """
