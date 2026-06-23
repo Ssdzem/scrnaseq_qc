@@ -1,16 +1,16 @@
 reference_atlas:
-  # This worktree uses the bundled Liver Cell Atlas raw matrix plus the myeloid-only annotation table.
+  # Default/template label-transfer profile: broad Liver Cell Atlas tier-1 labels on CPU.
   enabled: true
   zip_url: "https://www.livercellatlas.org/data_files/toDownload/rawData_human.zip"
-  metadata_url: "https://www.livercellatlas.org/data_files/toDownload/annot_humanMyeloid.csv"
+  metadata_url: "https://www.livercellatlas.org/data_files/toDownload/annot_humanAll.csv"
   cache_dir: "data/ref/cache"
   extract_dir: "data/ref/rawData_human"
   matrix_subdir: "countTable_human"
   metadata_join_key: "cell"
   metadata_label_col: "annot"
-  output_h5ad: "data/ref/lca_human_myeloid_reference.h5ad"
-  report: "data/ref/reference_build_report.myeloid.json"
-  ready_marker: "data/ref/.reference_myeloid_ready"
+  output_h5ad: "data/ref/lca_human_tier1_reference.h5ad"
+  report: "data/ref/reference_build_report.tier1.json"
+  ready_marker: "data/ref/.reference_tier1_ready"
 
 integration:
   # Enable an integration backend. If false, uses PCA for graph/UMAP/Leiden.
@@ -79,9 +79,9 @@ integration:
   # GPU settings for scVI/sysVI training. Set use_gpu false to force CPU;
   # require_gpu fails fast if CUDA is unavailable. For RAPIDS graph/preprocessing
   # steps, see integration.backend above.
-  use_gpu: true
-  require_gpu: true
-  accelerator: "gpu"
+  use_gpu: false
+  require_gpu: false
+  accelerator: "cpu"
   devices: 1
   float32_matmul_precision: "high"
   seed: 0
@@ -91,7 +91,8 @@ annotation:
   method: "scanvi"
   source_column: "cell_type"
   # Empty target_column writes to {annotation_method}_predicted_cell_type.
-  target_column: "scanvi_predicted_cell_type"
+  target_column: "tier_1_cell_type"
+  legacy_alias: "scanvi_pred"
   unknown_label: "Unknown"
   symphony:
     # Reference h5ad is supplied by Snakemake from reference_atlas.output_h5ad.
@@ -114,7 +115,7 @@ annotation:
     batch_size: 8192
     n_latent: 30
     min_shared_genes: 2000
-    accelerator: "gpu"
+    accelerator: "cpu"
     seed: 0
 
 evaluation:

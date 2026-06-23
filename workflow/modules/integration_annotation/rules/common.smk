@@ -3,7 +3,7 @@ from pathlib import Path
 import yaml
 
 
-IA_CONFIG_PATH = str(Path("config/integration_annotation.yaml"))
+IA_CONFIG_PATH = globals().get("IA_CONFIG_PATH", str(Path("config/integration_annotation.yaml")))
 
 
 def _load_ia_config(path: str) -> dict:
@@ -14,10 +14,12 @@ def _load_ia_config(path: str) -> dict:
         return {}
 
 
-IA_FULL_CFG = config if isinstance(config, dict) and config else _load_ia_config(IA_CONFIG_PATH)
+IA_FULL_CFG = _load_ia_config(IA_CONFIG_PATH)
 IA_INTEGRATION_CFG = IA_FULL_CFG.get("integration", {}) if isinstance(IA_FULL_CFG, dict) else {}
 IA_ANNOTATION_CFG = IA_FULL_CFG.get("annotation", {}) if isinstance(IA_FULL_CFG, dict) else {}
 IA_REFERENCE_CFG = IA_FULL_CFG.get("reference_atlas", {}) if isinstance(IA_FULL_CFG, dict) else {}
+IA_INPUTS_CFG = (IA_FULL_CFG.get("inputs", {}) if isinstance(IA_FULL_CFG, dict) else {}) or {}
+IA_OUTPUTS_CFG = (IA_FULL_CFG.get("outputs", {}) if isinstance(IA_FULL_CFG, dict) else {}) or {}
 
 
 def _ia_reference_h5ad() -> str:
@@ -37,6 +39,33 @@ def _ia_reference_ready_marker() -> str:
 IA_REFERENCE_H5AD = _ia_reference_h5ad()
 IA_REFERENCE_REPORT = _ia_reference_report()
 IA_REFERENCE_READY_MARKER = _ia_reference_ready_marker()
+
+
+def _ia_all_pre_integration_h5ad() -> str:
+    return str(IA_INPUTS_CFG.get("all_pre_integration_h5ad", "out/all_studies/all_pre_integration.h5ad")).strip()
+
+
+def _ia_study_pre_integration_h5ad_template() -> str:
+    return str(
+        IA_INPUTS_CFG.get(
+            "study_pre_integration_h5ad_template",
+            "out/{study}/qc/{study}_pre_integration.h5ad",
+        )
+    ).strip()
+
+
+def _ia_all_output_dir() -> str:
+    return str(IA_OUTPUTS_CFG.get("all_studies_dir", "out/integration_annotation/all_studies")).strip()
+
+
+def _ia_study_output_dir_template() -> str:
+    return str(IA_OUTPUTS_CFG.get("study_dir_template", "out/integration_annotation/{study}")).strip()
+
+
+IA_ALL_PRE_INTEGRATION_H5AD = _ia_all_pre_integration_h5ad()
+IA_STUDY_PRE_INTEGRATION_H5AD_TEMPLATE = _ia_study_pre_integration_h5ad_template()
+IA_ALL_OUTPUT_DIR = _ia_all_output_dir()
+IA_STUDY_OUTPUT_DIR_TEMPLATE = _ia_study_output_dir_template()
 
 
 def _ia_reference_targets(_wildcards=None):
@@ -105,6 +134,17 @@ def _ia_integrate_env() -> str:
     wants_scvi_gpu = accelerator == "gpu" or bool(use_gpu)
     wants_rapids_gpu = _ia_rapids_backend() in {"gpu", "auto"}
     return "../env/integration_annotation_gpu_py.yaml" if (wants_scvi_gpu or wants_rapids_gpu) else "../env/integration_annotation_py.yaml"
+
+
+def _ia_annotate_env() -> str:
+    method = str(IA_ANNOTATION_CFG.get("method", "")).strip().lower()
+    scanvi_cfg = IA_ANNOTATION_CFG.get("scanvi", {}) if isinstance(IA_ANNOTATION_CFG, dict) else {}
+    accelerator = str(scanvi_cfg.get("accelerator", "")).strip().lower()
+    use_gpu = scanvi_cfg.get("use_gpu", None)
+    if isinstance(use_gpu, str):
+        use_gpu = use_gpu.strip().lower() in {"1", "true", "yes", "y", "gpu"}
+    wants_scanvi_gpu = method == "scanvi" and (accelerator == "gpu" or bool(use_gpu))
+    return "../env/integration_annotation_gpu_py.yaml" if wants_scanvi_gpu else "../env/integration_annotation_py.yaml"
 
 
 def _ia_log(study: str) -> str:

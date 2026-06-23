@@ -1,0 +1,7 @@
+cores: 1
+printshellcmds: true
+rerun-incomplete: true
+keep-going: true
+use-conda: true
+config:
+  - profile_config_dir=profiles/lca_tier_2_gpu_sysvi_scanvi

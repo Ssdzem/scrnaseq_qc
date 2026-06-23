@@ -1,12 +1,12 @@
 rule ia_evaluate_all:
     input:
-        annotated="out/integration_annotation/all_studies/all_annotated.h5ad",
+        annotated=f"{IA_ALL_OUTPUT_DIR}/all_annotated.h5ad",
         ia_config=IA_CONFIG_PATH,
-        annotated_done="out/integration_annotation/all_studies/.annotated_done",
+        annotated_done=f"{IA_ALL_OUTPUT_DIR}/.annotated_done",
     output:
-        metrics_json="out/integration_annotation/all_studies/evaluation_metrics.json",
-        metrics_csv="out/integration_annotation/all_studies/evaluation_metrics.csv",
-        done=touch("out/integration_annotation/all_studies/.evaluated_done"),
+        metrics_json=f"{IA_ALL_OUTPUT_DIR}/evaluation_metrics.json",
+        metrics_csv=f"{IA_ALL_OUTPUT_DIR}/evaluation_metrics.csv",
+        done=touch(f"{IA_ALL_OUTPUT_DIR}/.evaluated_done"),
     log:
         _ia_log("all_studies")
     conda:
@@ -28,13 +28,13 @@ rule ia_evaluate_study:
     wildcard_constraints:
         study=r"(?!all_studies$)[^/]+"
     input:
-        annotated="out/integration_annotation/{study}/{study}_annotated.h5ad",
+        annotated=f"{IA_STUDY_OUTPUT_DIR_TEMPLATE}/{{study}}_annotated.h5ad",
         ia_config=IA_CONFIG_PATH,
-        annotated_done="out/integration_annotation/{study}/.{study}_annotated_done",
+        annotated_done=f"{IA_STUDY_OUTPUT_DIR_TEMPLATE}/.{{study}}_annotated_done",
     output:
-        metrics_json="out/integration_annotation/{study}/{study}_evaluation_metrics.json",
-        metrics_csv="out/integration_annotation/{study}/{study}_evaluation_metrics.csv",
-        done=touch("out/integration_annotation/{study}/.{study}_evaluated_done"),
+        metrics_json=f"{IA_STUDY_OUTPUT_DIR_TEMPLATE}/{{study}}_evaluation_metrics.json",
+        metrics_csv=f"{IA_STUDY_OUTPUT_DIR_TEMPLATE}/{{study}}_evaluation_metrics.csv",
+        done=touch(f"{IA_STUDY_OUTPUT_DIR_TEMPLATE}/.{{study}}_evaluated_done"),
     params:
         study=lambda wc: wc.study,
     log:

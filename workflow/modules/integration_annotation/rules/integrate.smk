@@ -1,11 +1,11 @@
 rule ia_integrate_all:
     input:
-        pre_integration="out/all_studies/all_pre_integration.h5ad",
+        pre_integration=IA_ALL_PRE_INTEGRATION_H5AD,
         ia_config=IA_CONFIG_PATH,
     output:
-        integrated="out/integration_annotation/all_studies/all_integrated.h5ad",
-        report="out/integration_annotation/all_studies/integration_report.json",
-        done=touch("out/integration_annotation/all_studies/.integrated_done"),
+        integrated=f"{IA_ALL_OUTPUT_DIR}/all_integrated.h5ad",
+        report=f"{IA_ALL_OUTPUT_DIR}/integration_report.json",
+        done=touch(f"{IA_ALL_OUTPUT_DIR}/.integrated_done"),
     params:
         integration_method=_ia_integration_method,
     log:
@@ -29,12 +29,12 @@ rule ia_integrate_study:
     wildcard_constraints:
         study=r"(?!all_studies$)[^/]+"
     input:
-        pre_integration="out/{study}/qc/{study}_pre_integration.h5ad",
+        pre_integration=IA_STUDY_PRE_INTEGRATION_H5AD_TEMPLATE,
         ia_config=IA_CONFIG_PATH,
     output:
-        integrated="out/integration_annotation/{study}/{study}_integrated.h5ad",
-        report="out/integration_annotation/{study}/{study}_integration_report.json",
-        done=touch("out/integration_annotation/{study}/.{study}_integrated_done"),
+        integrated=f"{IA_STUDY_OUTPUT_DIR_TEMPLATE}/{{study}}_integrated.h5ad",
+        report=f"{IA_STUDY_OUTPUT_DIR_TEMPLATE}/{{study}}_integration_report.json",
+        done=touch(f"{IA_STUDY_OUTPUT_DIR_TEMPLATE}/.{{study}}_integrated_done"),
     params:
         study=lambda wc: wc.study,
         integration_method=_ia_integration_method,

@@ -2,7 +2,24 @@
 
 from pathlib import Path
 
-configfile: str(Path(workflow.basedir) / "config" / "qc.yaml")
+
+def _profile_module_config(filename: str, explicit_key: str) -> str:
+    explicit = str(config.get(explicit_key, "")).strip()
+    if explicit:
+        return explicit
+
+    profile_dir = str(config.get("profile_config_dir", "")).strip()
+    if profile_dir:
+        profile_cfg = Path(profile_dir) / filename
+        if profile_cfg.exists():
+            return str(profile_cfg)
+
+    return str(Path(workflow.basedir) / "config" / filename)
+
+
+QC_CONFIG_PATH = _profile_module_config("qc.yaml", "qc_config")
+
+configfile: QC_CONFIG_PATH
 
 include: "workflow/modules/fetch/Snakefile"
 include: "workflow/modules/fastq_prepros/Snakefile"

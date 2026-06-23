@@ -8,8 +8,11 @@ import pandas as pd
 
 _project_cfg = os.path.join(workflow.basedir, "config", "fastq_prepros.yaml")
 _cwd_project_cfg = os.path.join(os.getcwd(), "config", "fastq_prepros.yaml")
+_explicit_cfg = str(config.get("fastq_prepros_config", "")).strip()
+_profile_dir = str(config.get("profile_config_dir", "")).strip()
+_profile_cfg = os.path.join(_profile_dir, "fastq_prepros.yaml") if _profile_dir else ""
 
-_candidates = [_project_cfg, _cwd_project_cfg]
+_candidates = [p for p in [_explicit_cfg, _profile_cfg, _project_cfg, _cwd_project_cfg] if p]
 _cfg = next((p for p in _candidates if os.path.exists(p)), None)
 if _cfg is None:
     raise WorkflowError(

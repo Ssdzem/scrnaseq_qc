@@ -1,19 +1,19 @@
 rule ia_annotate_all:
     input:
-        integrated="out/integration_annotation/all_studies/all_integrated.h5ad",
+        integrated=f"{IA_ALL_OUTPUT_DIR}/all_integrated.h5ad",
         ia_config=IA_CONFIG_PATH,
-        integrated_done="out/integration_annotation/all_studies/.integrated_done",
+        integrated_done=f"{IA_ALL_OUTPUT_DIR}/.integrated_done",
         reference=_ia_reference_targets,
     output:
-        annotated="out/integration_annotation/all_studies/all_annotated.h5ad",
-        summary="out/integration_annotation/all_studies/annotation_summary.csv",
-        done=touch("out/integration_annotation/all_studies/.annotated_done"),
+        annotated=f"{IA_ALL_OUTPUT_DIR}/all_annotated.h5ad",
+        summary=f"{IA_ALL_OUTPUT_DIR}/annotation_summary.csv",
+        done=touch(f"{IA_ALL_OUTPUT_DIR}/.annotated_done"),
     params:
         reference_h5ad=IA_REFERENCE_H5AD,
     log:
         _ia_log("all_studies")
     conda:
-        "../env/integration_annotation_py.yaml"
+        _ia_annotate_env()
     shell:
         r"""
         mkdir -p $(dirname {log})
@@ -32,21 +32,21 @@ rule ia_annotate_study:
     wildcard_constraints:
         study=r"(?!all_studies$)[^/]+"
     input:
-        integrated="out/integration_annotation/{study}/{study}_integrated.h5ad",
+        integrated=f"{IA_STUDY_OUTPUT_DIR_TEMPLATE}/{{study}}_integrated.h5ad",
         ia_config=IA_CONFIG_PATH,
-        integrated_done="out/integration_annotation/{study}/.{study}_integrated_done",
+        integrated_done=f"{IA_STUDY_OUTPUT_DIR_TEMPLATE}/.{{study}}_integrated_done",
         reference=_ia_reference_targets,
     output:
-        annotated="out/integration_annotation/{study}/{study}_annotated.h5ad",
-        summary="out/integration_annotation/{study}/{study}_annotation_summary.csv",
-        done=touch("out/integration_annotation/{study}/.{study}_annotated_done"),
+        annotated=f"{IA_STUDY_OUTPUT_DIR_TEMPLATE}/{{study}}_annotated.h5ad",
+        summary=f"{IA_STUDY_OUTPUT_DIR_TEMPLATE}/{{study}}_annotation_summary.csv",
+        done=touch(f"{IA_STUDY_OUTPUT_DIR_TEMPLATE}/.{{study}}_annotated_done"),
     params:
         study=lambda wc: wc.study,
         reference_h5ad=IA_REFERENCE_H5AD,
     log:
         _ia_log("{study}")
     conda:
-        "../env/integration_annotation_py.yaml"
+        _ia_annotate_env()
     shell:
         r"""
         mkdir -p $(dirname {log})

@@ -1,6 +1,33 @@
 # Snakefile for integration_annotation module (keep minimal; include rules).
 
-configfile: "config/integration_annotation.yaml"
+from pathlib import Path
+
+
+def _profile_module_config(filename: str, explicit_key: str) -> str:
+    """Resolve module config from an active profile, otherwise config/.
+
+    Profiles can set `--config profile_config_dir=profiles/<name>` (for example
+    from profiles/<name>/config.yaml). If profiles/<name>/<filename> exists,
+    that file becomes the module config. Otherwise the default config/<filename>
+    remains the canonical template/fallback. An explicit config key can override
+    both for one-off dry-runs.
+    """
+    explicit = str(config.get(explicit_key, "")).strip()
+    if explicit:
+        return explicit
+
+    profile_dir = str(config.get("profile_config_dir", "")).strip()
+    if profile_dir:
+        profile_cfg = Path(profile_dir) / filename
+        if profile_cfg.exists():
+            return str(profile_cfg)
+
+    return str(Path("config") / filename)
+
+
+IA_CONFIG_PATH = _profile_module_config("integration_annotation.yaml", "integration_annotation_config")
+
+configfile: IA_CONFIG_PATH
 
 wildcard_constraints:
     study=r"(?!all_studies$)[^/]+"
