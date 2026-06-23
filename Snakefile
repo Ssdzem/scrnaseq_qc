@@ -26,6 +26,7 @@ include: "workflow/modules/fastq_prepros/Snakefile"
 include: "workflow/modules/standardize/Snakefile"
 include: "workflow/modules/qc_preproc/Snakefile"
 include: "workflow/modules/integration_annotation/Snakefile"
+include: "workflow/modules/figures/Snakefile"
 
 
 def _study_from_config() -> str:

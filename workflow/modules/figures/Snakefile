@@ -1,0 +1,33 @@
+# Snakefile for reproducible top-level a1_p1_qc figures.
+
+from pathlib import Path
+
+
+def _figures_cfg() -> dict:
+    cfg = config.get("figures", {}) if isinstance(config, dict) else {}
+    return cfg if isinstance(cfg, dict) else {}
+
+
+def _figures_h5ad() -> str:
+    explicit = str(_figures_cfg().get("h5ad", "")).strip()
+    if explicit:
+        return explicit
+    candidates = [
+        Path("out/integration_annotation/all_studies/myeloid.h5ad"),
+        Path("out/integration_annotation/all_studies/all_annotated.h5ad"),
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return str(candidate)
+    return str(candidates[-1])
+
+
+P1_FIGURE_OUTPUTS = [
+    "out/figures/01_umap_study_accession.png",
+    "out/figures/02_unique_samples_by_fibrosis_stage.png",
+    "out/figures/03_unique_samples_by_study_accession.png",
+    "out/figures/04_cell_type_study_composition.png",
+    "out/figures/manifest.json",
+]
+
+include: "rules/figures.smk"
