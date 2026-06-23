@@ -52,9 +52,11 @@ integration:
   n_pcs: 50
   n_neighbors: 15
   leiden_resolution: 1.0
-  # Large integrated runs can skip PCA/UMAP while still computing graph/Leiden on X_integrated.
+  # Large integrated runs can skip PCA while still computing graph/Leiden on X_integrated.
+  # UMAP is computed on X_integrated (the sysVI projection) so downstream figures/exports
+  # always have an X_umap embedding from the reintegrated macrophage/DC object.
   compute_pca: false
-  compute_umap: false
+  compute_umap: true
   compute_leiden: true
   # Backend for PCA / Harmony / neighbors / UMAP / Leiden graph steps.
   # - "cpu": always use Scanpy / HarmonyPy CPU implementations
