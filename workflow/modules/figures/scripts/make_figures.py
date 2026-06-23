@@ -43,9 +43,9 @@ FIGURES: tuple[FigureSpec, ...] = (
         filename="02_unique_samples_by_fibrosis_stage.png",
         legacy_reference="annotate-2026-06-22_20-13-36.png",
         title="Unique samples by fibrosis stage",
-        source_object="configured metadata CSV: config/liver_scRNAseq_metadata_everything.csv",
-        structure="sample-level metadata table grouped by fibrosis_stage",
-        represents="Number of distinct samples per fibrosis stage.",
+        source_object="configured metadata CSV: config/liver_scRNAseq_metadata_everything.csv filtered to include truthy rows",
+        structure="included sample-level metadata table grouped by fibrosis_stage",
+        represents="Number of included distinct samples per fibrosis stage.",
         pipeline_position="Metadata summary / cohort composition diagnostic.",
     ),
     FigureSpec(
@@ -53,9 +53,9 @@ FIGURES: tuple[FigureSpec, ...] = (
         filename="03_unique_samples_by_study_accession.png",
         legacy_reference="annotate-2026-06-22_20-13-55.png",
         title="Unique samples by study accession",
-        source_object="configured metadata CSV: config/liver_scRNAseq_metadata_everything.csv",
-        structure="sample-level metadata table grouped by study_accession",
-        represents="Number of distinct samples contributed by each study accession.",
+        source_object="configured metadata CSV: config/liver_scRNAseq_metadata_everything.csv filtered to include truthy rows",
+        structure="included sample-level metadata table grouped by study_accession",
+        represents="Number of included distinct samples contributed by each study accession.",
         pipeline_position="Metadata summary / cohort composition diagnostic.",
     ),
     FigureSpec(
@@ -131,8 +131,11 @@ def _load_metadata_counts(metadata_csv: Path, group_col: str, pd):
     if not metadata_csv.exists():
         raise FileNotFoundError(f"Metadata source not found: {metadata_csv}")
     meta = pd.read_csv(metadata_csv)
-    if "sample_id" not in meta.columns or group_col not in meta.columns:
-        raise KeyError(f"{metadata_csv} must contain sample_id and {group_col}")
+    if "sample_id" not in meta.columns or group_col not in meta.columns or "include" not in meta.columns:
+        raise KeyError(f"{metadata_csv} must contain sample_id, include, and {group_col}")
+    meta = meta.loc[_as_bool_series(meta["include"])].copy()
+    if meta.empty:
+        raise ValueError(f"{metadata_csv} has no include-truthy rows for {group_col}")
     counts = (
         meta.dropna(subset=[group_col, "sample_id"])
         .drop_duplicates([group_col, "sample_id"])
@@ -286,6 +289,7 @@ def _write_manifest(args: argparse.Namespace, outputs: list[Path]) -> Path:
         "out_dir": str(args.out_dir),
         "h5ad": str(args.h5ad),
         "metadata_csv": str(args.metadata_csv),
+        "metadata_filter": "include column truthy: true/1/yes/y/t",
         "figures": [
             {
                 **asdict(spec),
