@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Recreate the ordered a1_p1_qc figure set from pipeline objects.
+"""Recreate the ordered a1_p1_qc figure set from canonical pipeline objects.
 
-The historical files under ``out/figures`` were Marimo/interactive ``annotate-*``
-PNGs.  This script gives those figures stable, semantic filenames and records
-which old file each generated image replaces in ``manifest.json``.
+Each figure has a stable, semantic filename and is written as both a
+publication-ready vector PDF and a PNG preview, alongside a ``manifest.json``
+recording the source object, structure, and interpretation for each image.
 """
 
 from __future__ import annotations
@@ -15,11 +15,45 @@ from pathlib import Path
 from typing import Callable, Iterable, Sequence
 
 
+# Publication styling. SciencePlots gives Nature-flavoured matplotlib stylesheets;
+# we fall back to the rcParams below if it is not installed so figures always render.
+# pdf/ps fonttype 42 embeds editable TrueType text (vector PDFs stay editable in Illustrator/Inkscape).
+PUB_RCPARAMS = {
+    "figure.dpi": 300,
+    "savefig.dpi": 300,
+    "savefig.bbox": "tight",
+    "pdf.fonttype": 42,
+    "ps.fonttype": 42,
+    "svg.fonttype": "none",
+    "font.family": "sans-serif",
+    "font.size": 9,
+    "axes.titlesize": 10,
+    "axes.labelsize": 9,
+    "axes.spines.top": False,
+    "axes.spines.right": False,
+    "legend.frameon": False,
+}
+
+
+def _apply_pub_style() -> None:
+    import matplotlib as mpl
+    import matplotlib.pyplot as plt
+
+    try:
+        import scienceplots  # noqa: F401
+
+        # no-latex keeps rendering robust on boxes without a full LaTeX toolchain.
+        plt.style.use(["science", "nature", "no-latex"])
+    except Exception:
+        pass
+    # Apply our overrides after the stylesheet so they always win.
+    mpl.rcParams.update(PUB_RCPARAMS)
+
+
 @dataclass(frozen=True)
 class FigureSpec:
     order: int
     filename: str
-    legacy_reference: str
     title: str
     source_object: str
     structure: str
@@ -31,7 +65,6 @@ FIGURES: tuple[FigureSpec, ...] = (
     FigureSpec(
         order=1,
         filename="01_umap_study_accession.png",
-        legacy_reference="annotate-2026-06-22_20-12-51.png",
         title="study_accession UMAP",
         source_object="integration_annotation H5AD: .obs['study_accession'] + .obsm['X_umap']",
         structure="cell-level AnnData object with UMAP coordinates and study metadata",
@@ -41,7 +74,6 @@ FIGURES: tuple[FigureSpec, ...] = (
     FigureSpec(
         order=2,
         filename="02_unique_samples_by_fibrosis_stage.png",
-        legacy_reference="annotate-2026-06-22_20-13-36.png",
         title="Unique samples by fibrosis stage",
         source_object="configured metadata CSV: config/liver_scRNAseq_metadata_everything.csv filtered to include truthy rows",
         structure="included sample-level metadata table grouped by fibrosis_stage",
@@ -51,7 +83,6 @@ FIGURES: tuple[FigureSpec, ...] = (
     FigureSpec(
         order=3,
         filename="03_unique_samples_by_study_accession.png",
-        legacy_reference="annotate-2026-06-22_20-13-55.png",
         title="Unique samples by study accession",
         source_object="configured metadata CSV: config/liver_scRNAseq_metadata_everything.csv filtered to include truthy rows",
         structure="included sample-level metadata table grouped by study_accession",
@@ -61,7 +92,6 @@ FIGURES: tuple[FigureSpec, ...] = (
     FigureSpec(
         order=4,
         filename="04_cell_type_study_composition.png",
-        legacy_reference="annotate-2026-06-22_20-14-33.png",
         title="Cell-type composition by study accession",
         source_object="integration_annotation H5AD: .obs['tier_1_cell_type'] + .obs['study_accession']",
         structure="cell-level AnnData obs cross-tabulated by canonical tier_1_cell_type and study_accession",
@@ -80,6 +110,16 @@ def _import_plotting():
     import pandas as pd
 
     return np, pd, plt
+
+
+def _save_fig(fig, out_png: Path, *, dpi: int = 300) -> Path:
+    """Write a publication vector PDF plus a PNG preview; return the PNG path."""
+    _np, _pd, plt = _import_plotting()
+    out_png.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_png.with_suffix(".pdf"), bbox_inches="tight")
+    fig.savefig(out_png, dpi=dpi, bbox_inches="tight")
+    plt.close(fig)
+    return out_png
 
 
 def _read_h5ad_backed(path: Path):
@@ -185,9 +225,7 @@ def _save_bar_with_labels(df, *, x_col: str, y_col: str, title: str, xlabel: str
     if len(plot_df) > 3:
         ax.tick_params(axis="x", rotation=25)
     fig.tight_layout()
-    out.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out, dpi=150)
-    plt.close(fig)
+    _save_fig(fig, out)
 
 
 def plot_umap_study_accession(args: argparse.Namespace, spec: FigureSpec) -> Path:
@@ -215,11 +253,7 @@ def plot_umap_study_accession(args: argparse.Namespace, spec: FigureSpec) -> Pat
     ax.set_ylabel("UMAP2")
     ax.legend(loc="center left", bbox_to_anchor=(1.02, 0.5), frameon=False, markerscale=5, fontsize=8)
     fig.tight_layout()
-    out = args.out_dir / spec.filename
-    out.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out, dpi=150)
-    plt.close(fig)
-    return out
+    return _save_fig(fig, args.out_dir / spec.filename)
 
 
 def plot_unique_samples_by_fibrosis(args: argparse.Namespace, spec: FigureSpec) -> Path:
@@ -277,11 +311,7 @@ def plot_cell_type_study_composition(args: argparse.Namespace, spec: FigureSpec)
     ax.set_xlim(0, 1)
     ax.legend(title="study_accession", bbox_to_anchor=(1.02, 1), loc="upper left", fontsize=7)
     fig.tight_layout()
-    out = args.out_dir / spec.filename
-    out.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out, dpi=150)
-    plt.close(fig)
-    return out
+    return _save_fig(fig, args.out_dir / spec.filename)
 
 
 PLOTTERS: dict[int, Callable[[argparse.Namespace, FigureSpec], Path]] = {
@@ -299,6 +329,7 @@ def _write_manifest(args: argparse.Namespace, outputs: list[Path]) -> Path:
         "h5ad": str(args.h5ad),
         "metadata_csv": str(args.metadata_csv),
         "metadata_filter": "include column strict boolean: true/1/yes/y/t or false/0/no/n/f",
+        "formats": ["pdf", "png"],
         "source_contracts": {
             "study_column": "study_accession",
             "cell_type_column": "tier_1_cell_type",
@@ -308,6 +339,7 @@ def _write_manifest(args: argparse.Namespace, outputs: list[Path]) -> Path:
             {
                 **asdict(spec),
                 "output": str(args.out_dir / spec.filename),
+                "output_pdf": str((args.out_dir / spec.filename).with_suffix(".pdf")),
             }
             for spec in FIGURES
         ],
@@ -334,6 +366,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
+    _apply_pub_style()
     selected = set(args.only or [spec.order for spec in FIGURES])
     args.out_dir.mkdir(parents=True, exist_ok=True)
     outputs: list[Path] = []

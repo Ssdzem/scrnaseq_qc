@@ -1,8 +1,14 @@
 # a1_p1_qc figures module
 
-This module recreates the four ordered figures previously present as timestamped
-`out/figures/annotate-*.png` Marimo exports.  It writes stable semantic PNG names
-plus `out/figures/manifest.json` linking each output to the legacy reference.
+This module generates four ordered figures from canonical pipeline objects.  It
+writes stable semantic filenames plus `out/figures/manifest.json` recording the
+source object, structure, and interpretation for each image.
+
+Each figure is written as a **publication-ready vector `.pdf`** (embedded
+editable TrueType fonts) plus a **`.png` preview** (the Snakemake-tracked
+output). Styling uses [SciencePlots](https://github.com/garrettj403/SciencePlots)
+(`science` + `nature`, `no-latex`) when installed, falling back to a built-in
+300-dpi rcParams style so figures always render.
 
 Run from `a1_p1_qc/` with Snakemake target `figures_all`, or run the script:
 
