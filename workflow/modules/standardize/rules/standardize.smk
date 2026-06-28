@@ -126,6 +126,14 @@ def _required_spec_input_paths(study: str) -> list[str]:
 
 
 def _standardize_unpack_fetch_input(study: str) -> str | list[str]:
+    # Studies whose raw inputs come from a GEO `*_RAW.tar` are declared in the
+    # fetch `extract:` config map; their cleaner inputs only exist after the
+    # fetch module's `fetch_extract` rule runs, so depend on its `.extract_done`
+    # sentinel (which itself pulls `.fetch_done` -> the download).
+    extract_cfg = config.get("extract", {}) or {}
+    if str(study) in {str(k) for k in extract_cfg}:
+        return f"out/{study}/raw/.extract_done"
+
     required_paths = _required_spec_input_paths(study)
     if unpack_requires_fetch_done(study=study, required_paths=required_paths):
         return f"out/{study}/.fetch_done"

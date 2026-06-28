@@ -1,0 +1,21 @@
+# a1_p1_qc "validation" profile — held-out F0/F4 cohorts for SMIF validation.
+#
+# Processes GSE136103 / GSE168933 / GSE181483 (held-out fibrosis-extreme cohorts)
+# through a1_p1_qc, on a no-GPU / 60 GiB box: CPU Harmony integration + scANVI
+# label transfer, memory-capped. Every deviation from the generic a1_p1_qc
+# defaults lives under profiles/validation/ — the shared config/*.yaml stay
+# untouched. Each per-module yaml here is a FULL copy that REPLACES the module
+# default (the modules' `_profile_module_config` resolver selects, it does not
+# deep-merge), selected via `profile_config_dir` below.
+#
+# Run from a1_p1_qc/, e.g.:
+#   snakemake --workflow-profile profiles/validation fetch_all
+#   snakemake --workflow-profile profiles/validation out/GSE136103/raw.h5ad
+cores: 8
+printshellcmds: true
+rerun-incomplete: true
+keep-going: true
+use-conda: true
+conda-frontend: conda
+config:
+  - profile_config_dir=profiles/validation

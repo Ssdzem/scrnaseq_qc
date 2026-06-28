@@ -260,6 +260,25 @@ def build_reference_anndata(full_cfg: dict, output_h5ad: str) -> tuple[object, d
     # Ensure primary matrix remains raw counts in final reference output.
     adata.X = adata.layers["counts"].copy()
 
+    # Optional cap on reference size (reference_atlas.max_cells): stratified by
+    # cell_type so every label survives. Needed for scANVI label transfer on CPU
+    # boxes where the full atlas OOMs (e.g. 60 GiB). 0/unset = keep all cells.
+    ref_cfg_local = full_cfg.get("reference_atlas", {}) if isinstance(full_cfg, dict) else {}
+    max_cells = int(ref_cfg_local.get("max_cells", 0) or 0)
+    if max_cells and adata.n_obs > max_cells:
+        frac = max_cells / adata.n_obs
+        floor = int(ref_cfg_local.get("max_cells_floor_per_type", 200))
+        idx = (
+            adata.obs.groupby("cell_type", observed=True, group_keys=False)
+            .apply(lambda d: d.sample(n=min(len(d), max(floor, round(len(d) * frac))),
+                                      random_state=0))
+            .index
+        )
+        logging.info("Capping reference %d -> %d cells (max_cells=%d, stratified by cell_type)",
+                     adata.n_obs, len(idx), max_cells)
+        adata = adata[adata.obs.index.isin(set(idx))].copy()
+        adata.X = adata.layers["counts"].copy()
+
     adata.uns.setdefault("integration_annotation", {})
     adata.uns["integration_annotation"]["reference_atlas"] = {
         "zip_url": zip_url,

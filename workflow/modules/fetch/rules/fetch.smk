@@ -1,4 +1,5 @@
 import os
+import re
 import shlex
 import shutil
 import sys
@@ -186,10 +187,32 @@ TRIPLES_BY_STUDY_FASTQS = {
 }
 
 
+# Studies whose downloaded GEO `*_RAW.tar` must be unpacked into a cleaner-ready
+# layout before standardize can run. Driven entirely by the `extract:` config
+# map (set per profile, e.g. profiles/validation/fetch.yaml):
+#
+#   extract:
+#     GSE136103: triplet   # per-sample 10x triplets
+#     GSE181483: triplet
+#     GSE168933: csv        # per-sample count CSVs
+#
+# Studies absent from the map keep the default fetch behaviour (no extraction),
+# so this is inert for the standard fastq/processed-matrix studies.
+EXTRACT_FORMATS = {
+    str(k): str(v).strip()
+    for k, v in (config.get("extract", {}) or {}).items()
+    if str(v).strip()
+}
+_EXTRACT_STUDIES = sorted(EXTRACT_FORMATS)
+# Regex matching nothing, for empty wildcard-constraint alternations.
+_MATCH_NONE = r"$^"
+_EXTRACT_STUDY_RE = "|".join(re.escape(s) for s in _EXTRACT_STUDIES) or _MATCH_NONE
+
 
 rule fetch_all:
     input:
         expand(f"{OUT_ROOT}/{{study}}/.fetch_done", study=STUDIES)
+        + [f"out/{s}/raw/.extract_done" for s in _EXTRACT_STUDIES if s in STUDIES]
 
 
 rule fetch_done:
@@ -219,6 +242,36 @@ rule fetch_study:
         f"{OUT_ROOT}/{{study}}/.fetch_done"
 
 
+# Unpack a downloaded GEO `*_RAW.tar` into the cleaner-ready layout. Depends on
+# the real download `.fetch_done` (absolute OUT_ROOT path), so requesting
+# `.extract_done` transitively downloads first. The sentinel itself is emitted at
+# the relative `out/...` path (matching the standardize dependency and the
+# relative-target convention used by fetch_done_data / fetch_run_data). Only
+# matches studies declared in the `extract:` config map.
+rule fetch_extract:
+    input:
+        fetch_done=f"{OUT_ROOT}/{{study}}/.fetch_done",
+        script=os.path.join(MODULE_DIR, "scripts", "extract_raw_archive.py"),
+    output:
+        touch("out/{study}/raw/.extract_done"),
+    params:
+        out_root=OUT_ROOT,
+        fmt=lambda wc: EXTRACT_FORMATS[wc.study],
+    wildcard_constraints:
+        study=_EXTRACT_STUDY_RE,
+    log:
+        f"{OUT_ROOT}/logs/fetch/extract/{{study}}.log",
+    conda:
+        os.path.join(MODULE_DIR, "env", "fetch.yaml")
+    shell:
+        r"""
+        mkdir -p $(dirname {log})
+        set -o pipefail
+        python {input.script} --study {wildcards.study} --format {params.fmt} --out-root {params.out_root} \
+          2>&1 | tee -a {log}
+        """
+
+
 rule fetch_run:
     input:
         metadata=METADATA_CSV,
@@ -243,6 +296,12 @@ rule fetch_run:
 
 # Allow targeting `data/<study>/.fetch_done` directly when OUT_ROOT is something
 # else (e.g. absolute path). This keeps CLI usage intuitive.
+#
+# GEO `*_RAW.tar` studies (those in the `extract:` map) are EXCLUDED here so they
+# don't get short-circuited by this no-op aggregator: with a relative OUT_ROOT
+# the two `.fetch_done` outputs collide, and the no-op would otherwise shadow the
+# real `download-study` (rule fetch_done). Excluding them routes such studies to
+# fetch_done so the archive is actually downloaded.
 rule fetch_done_data:
     input:
         lambda wc: [
@@ -250,7 +309,9 @@ rule fetch_done_data:
             for donor_id, sample_id, run_id in sorted(TRIPLES_BY_STUDY_FASTQS.get(wc.study, set()))
         ]
     output:
-        touch("out/{study,[^/]+}/.fetch_done"),
+        touch("out/{study}/.fetch_done"),
+    wildcard_constraints:
+        study=(rf"(?!(?:{_EXTRACT_STUDY_RE})$)[^/]+" if _EXTRACT_STUDIES else r"[^/]+"),
     shell:
         "true"
 

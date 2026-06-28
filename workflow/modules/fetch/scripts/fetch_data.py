@@ -24,6 +24,7 @@ import re
 import subprocess
 import time
 import shlex
+from functools import lru_cache
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Set
 
@@ -298,7 +299,6 @@ def _curl_download(url: str, dest: Path) -> None:
         "10",
         "--retry-delay",
         "2",
-        "--retry-all-errors",
         "--connect-timeout",
         "30",
         "--max-time",
@@ -309,7 +309,62 @@ def _curl_download(url: str, dest: Path) -> None:
         str(dest),
         url,
     ]
-    subprocess.run(cmd, check=True)
+    # `--retry-all-errors` only exists on newer curl; pass it conditionally so we
+    # don't hard-fail on older binaries.
+    if _curl_supports_retry_all_errors():
+        cmd.insert(7, "--retry-all-errors")
+    try:
+        subprocess.run(cmd, check=True)
+    except subprocess.CalledProcessError as exc:
+        # curl exit 22 == HTTP >= 400. With `-C -` (resume), a fully downloaded
+        # file can still trigger a spurious 416/22 on the resume probe; treat a
+        # size-complete file as success.
+        if exc.returncode == 22 and dest.exists():
+            remote_size = _http_content_length(url)
+            try:
+                local_size = dest.stat().st_size
+            except OSError:
+                local_size = -1
+            if remote_size is not None and local_size == remote_size:
+                return
+        raise
+
+
+@lru_cache(maxsize=1)
+def _curl_supports_retry_all_errors() -> bool:
+    try:
+        result = subprocess.run(
+            ["curl", "--help", "all"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return False
+    return "--retry-all-errors" in result.stdout
+
+
+def _http_content_length(url: str) -> Optional[int]:
+    try:
+        result = subprocess.run(
+            ["curl", "-sSIL", url],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+
+    content_length: Optional[int] = None
+    for line in result.stdout.splitlines():
+        if line.lower().startswith("content-length:"):
+            _, _, value = line.partition(":")
+            value = value.strip()
+            try:
+                content_length = int(value)
+            except ValueError:
+                continue
+    return content_length
 
 
 def _resolve_aspera_param(val: str, env_key: str) -> str:
