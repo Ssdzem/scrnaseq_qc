@@ -8,7 +8,7 @@ rule figures_all:
     log:
         "out/logs/figures/figures.log"
     conda:
-        "../../exploration/env/a1p2def.yaml"
+        "../env/a1p2def.yaml"
     shell:
         r"""
         mkdir -p "$(dirname {log:q})"
