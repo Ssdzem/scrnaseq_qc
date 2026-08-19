@@ -1,0 +1,6 @@
+out/
+.snakemake/
+.snakemake_envs/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/

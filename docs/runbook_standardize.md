@@ -32,3 +32,14 @@ Important per-study knobs:
 
 - `out/<study>/raw.h5ad`
 - `out/<study>/trimming_tables.csv`
+- `out/<study>/qc_raw/raw_qc_metrics.csv` — per-cell total_counts, n_genes_by_counts,
+  pct_counts_mt (computed from `raw.h5ad` as-is, independent of whether the
+  spec's `input.qc` block filtered anything).
+- `out/<study>/qc_raw/pictures/raw_{log1p_total_counts,log1p_n_genes_by_counts,pct_counts_mt}.png`
+  — per-sample distribution histograms.
+- `out/<study>/qc_raw/pictures/raw_counts_vs_genes_by_mito.png` — counts vs.
+  genes scatter, colored by %mito.
+
+Use these to pick cutoffs before deciding whether/what to set in a spec's
+`input.qc` block (or a study with none, like a raw-data-review pass, just
+gets these plots with no cells dropped).

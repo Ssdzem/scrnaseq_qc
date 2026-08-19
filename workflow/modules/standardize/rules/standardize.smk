@@ -59,6 +59,25 @@ def _study_trim_table(study: str) -> str:
     return f"out/{study}/trimming_tables.csv"
 
 
+def _study_qc_raw_metrics(study: str) -> str:
+    return f"out/{study}/qc_raw/raw_qc_metrics.csv"
+
+
+def _study_qc_raw_figs(study: str) -> list[str]:
+    return [
+        f"out/{study}/qc_raw/pictures/raw_log1p_total_counts.png",
+        f"out/{study}/qc_raw/pictures/raw_log1p_n_genes_by_counts.png",
+        f"out/{study}/qc_raw/pictures/raw_pct_counts_mt.png",
+        f"out/{study}/qc_raw/pictures/raw_counts_vs_genes_by_mito.png",
+    ]
+
+
+def _study_mito_gene_prefix(study: str) -> str:
+    spec = _load_spec(study)
+    inp = spec.get("input") or {}
+    return str(inp.get("mito_gene_prefix") or (inp.get("qc") or {}).get("mito_gene_prefix") or "MT-")
+
+
 def _load_spec(study: str) -> dict:
     spec_path = _spec_path_for_study(study)
     return yaml.safe_load(open(spec_path, "r", encoding="utf-8")) or {}
@@ -216,7 +235,10 @@ def _study_constraint(studies: list[str]) -> str:
 
 rule standardize_all:
     input:
-        [_study_out_h5ad(s) for s in STUDIES] + [_study_trim_table(s) for s in STUDIES]
+        [_study_out_h5ad(s) for s in STUDIES]
+        + [_study_trim_table(s) for s in STUDIES]
+        + [_study_qc_raw_metrics(s) for s in STUDIES]
+        + [fig for s in STUDIES for fig in _study_qc_raw_figs(s)]
 
 
 rule standardize_unpack_study:
@@ -318,4 +340,36 @@ rule standardize_study_r:
           --output {output.h5ad} \
           --workers {params.workers} \
           --log {log}
+        """
+
+
+rule standardize_qc_distributions:
+    input:
+        h5ad=_study_out_h5ad("{study}"),
+    output:
+        metrics=_study_qc_raw_metrics("{study}"),
+        counts_fig=_study_qc_raw_figs("{study}")[0],
+        genes_fig=_study_qc_raw_figs("{study}")[1],
+        mito_fig=_study_qc_raw_figs("{study}")[2],
+        scatter_fig=_study_qc_raw_figs("{study}")[3],
+    params:
+        study=lambda wc: wc.study,
+        mito_gene_prefix=lambda wc: _study_mito_gene_prefix(wc.study),
+    log:
+        "out/logs/standardize/{study}.qc_distributions.log"
+    conda:
+        "../env/standardize_py.yaml"
+    shell:
+        r"""
+        mkdir -p $(dirname {log})
+        $CONDA_PREFIX/bin/python -u workflow/modules/standardize/scripts/qc_distribution_plots.py \
+          --study {params.study} \
+          --input {input.h5ad} \
+          --mito-gene-prefix {params.mito_gene_prefix} \
+          --output-metrics {output.metrics} \
+          --output-counts-fig {output.counts_fig} \
+          --output-genes-fig {output.genes_fig} \
+          --output-mito-fig {output.mito_fig} \
+          --output-scatter-fig {output.scatter_fig} \
+          > {log} 2>&1
         """
