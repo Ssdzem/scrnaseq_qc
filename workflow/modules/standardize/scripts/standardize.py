@@ -76,6 +76,10 @@ def _run_cleaner(
         from cleaners.csv_handler import run_csv_handler
 
         run_csv_handler(study=study, study_spec=study_spec, output_h5ad=output_h5ad, log=log)
+    elif cleaner == "count_txt":
+        from cleaners.count_txt import run_count_txt
+
+        run_count_txt(study=study, study_spec=study_spec, output_h5ad=output_h5ad, log=log)
     elif cleaner == "count_matrix_10x_multi_runs":
         from cleaners.count_matrix_10x_multi_runs import run_count_matrix_10x_multi_runs
 
@@ -124,13 +128,14 @@ def _run_pipeline(*, study: str, study_spec: dict, output_h5ad: Path, workers: i
             metadata_already_joined = True
         elif cleaner == "tenx_h5_multi":
             use_explicit_samples = bool(inp.get("samples")) and (
-                prev_h5ad is None or prev_cleaner in {"csv_handler", "count_matrix_10x_multi_runs"}
+                prev_h5ad is None or prev_cleaner in {"csv_handler", "count_txt", "count_matrix_10x_multi_runs"}
             )
             if use_explicit_samples:
                 # Use explicit input.samples for:
                 #   1) single-step tenx_h5_multi specs, or
-                #   2) csv_handler -> tenx_h5_multi pipelines, where csv_handler writes
-                #      a placeholder h5ad and prepares real sample inputs.
+                #   2) csv_handler/count_txt -> tenx_h5_multi pipelines, where the
+                #      upstream cleaner writes a placeholder h5ad and prepares real
+                #      per-sample inputs.
                 local_spec = {
                     "input": {
                         "samples": inp.get("samples"),

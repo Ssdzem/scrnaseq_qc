@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gzip
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import TextIO
@@ -9,7 +10,7 @@ import pandas as pd
 from scipy import sparse
 from rtlog import log_kv, log_line
 
-from cleaners.count_matrix_10x import run_count_matrix_10x
+from cleaners.count_matrix_10x import _read_mtx_shape, run_count_matrix_10x
 
 
 def _require_path(value: str | None, name: str) -> Path:
@@ -115,6 +116,27 @@ def _triplet_dir(*, inp: dict, donor_id: str, sample_id: str, run_id: str) -> Pa
     return Path(resolved)
 
 
+def _synthesize_barcodes(*, matrix: Path, out_barcodes: Path, run_id: str, log: TextIO) -> None:
+    """Fabricate positional `barcodes.tsv.gz` for a run that ships none.
+
+    Some deposits provide only a matrix + features and drop the barcode list
+    (e.g. S-BSST1035). Barcodes are only used downstream as unique cell keys, so
+    positional ids (`<run_id>_cell_000001`, ... in matrix-column order) are a
+    faithful stand-in. The count comes from the MatrixMarket header, keeping
+    barcode i aligned with matrix column i.
+    """
+
+    _n_genes, n_barcodes = _read_mtx_shape(matrix)
+    width = max(6, len(str(n_barcodes)))
+    log_line(
+        log,
+        f"[{run_id}] No barcodes.tsv.gz provided; synthesizing {n_barcodes} placeholder barcodes",
+    )
+    with gzip.open(out_barcodes, "wt", encoding="utf-8") as fout:
+        for i in range(1, n_barcodes + 1):
+            fout.write(f"{run_id}_cell_{i:0{width}d}\n")
+
+
 def _resolve_workers(*, workers: int, n_runs: int) -> int:
     if n_runs <= 1:
         return 1
@@ -150,6 +172,7 @@ def run_count_matrix_10x_multi_runs(
     log: TextIO,
 ) -> None:
     inp = study_spec.setdefault("input", {})
+    synthesize_missing_barcodes = bool(inp.get("synthesize_missing_barcodes", False))
 
     run_df = _load_runs(study=study, inp=inp)
     run_df = _select_runs_for_execution(run_df=run_df, inp=inp, log=log)
@@ -171,6 +194,21 @@ def run_count_matrix_10x_multi_runs(
         genes = triplet_dir / "features.tsv.gz"
         barcodes = triplet_dir / "barcodes.tsv.gz"
         run_h5ad = tmp_dir / f"{row.run_id}.h5ad"
+
+        if not barcodes.exists():
+            if not synthesize_missing_barcodes:
+                raise SystemExit(
+                    f"Missing {barcodes} for run_id={row.run_id}. This deposit ships no "
+                    "barcode list; set input.synthesize_missing_barcodes=true to fabricate "
+                    "positional barcodes from the matrix shape."
+                )
+            if not matrix.exists():
+                raise SystemExit(
+                    f"Cannot synthesize barcodes for run_id={row.run_id}: matrix not found at {matrix}"
+                )
+            _synthesize_barcodes(
+                matrix=matrix, out_barcodes=barcodes, run_id=str(row.run_id), log=log
+            )
 
         log_line(
             log,
