@@ -1,0 +1,54 @@
+study: "E-MTAB-15983"
+
+# Wu & Wei et al. 2025 (EBI/ArrayExpress) — 16 primary cervical tumors
+# (8 adenocarcinoma, 2 adenosquamous, 6 SCC), fresh surgical resections.
+# Ships one CellRanger `*_sample_feature_bc_matrix.h5` per sample, so
+# tenx_h5_multi reads them directly and no upstream cleaner is needed.
+input:
+  workers: 8
+  mem_mb: 64000
+  # No 'qc:' block on purpose (same rationale as the Lei_2022_NGDC specs):
+  # tenx_h5_multi only runs its per-sample MAD / miQC-like cell filter when
+  # input.qc is set, so leaving it out keeps raw.h5ad genuinely unfiltered and
+  # cutoffs get picked from the standardize_qc_distributions figures/table.
+  # Only used for the %mito figure below (not for filtering).
+  mito_gene_prefix: "MT-"
+  samples:
+    - sample_id: "AC-1"
+      h5: "/STORAGE/csbig/jruiz/Single_cell_CaCu/raw_data/E-MTAB-15983/counts/AC-1_sample_feature_bc_matrix.h5"
+    - sample_id: "AC-2"
+      h5: "/STORAGE/csbig/jruiz/Single_cell_CaCu/raw_data/E-MTAB-15983/counts/AC-2_sample_feature_bc_matrix.h5"
+    - sample_id: "AC-3"
+      h5: "/STORAGE/csbig/jruiz/Single_cell_CaCu/raw_data/E-MTAB-15983/counts/AC-3_sample_feature_bc_matrix.h5"
+    - sample_id: "AC-4"
+      h5: "/STORAGE/csbig/jruiz/Single_cell_CaCu/raw_data/E-MTAB-15983/counts/AC-4_sample_feature_bc_matrix.h5"
+    - sample_id: "AC-5"
+      h5: "/STORAGE/csbig/jruiz/Single_cell_CaCu/raw_data/E-MTAB-15983/counts/AC-5_sample_feature_bc_matrix.h5"
+    - sample_id: "AC-6"
+      h5: "/STORAGE/csbig/jruiz/Single_cell_CaCu/raw_data/E-MTAB-15983/counts/AC-6_sample_feature_bc_matrix.h5"
+    - sample_id: "AC-7"
+      h5: "/STORAGE/csbig/jruiz/Single_cell_CaCu/raw_data/E-MTAB-15983/counts/AC-7_sample_feature_bc_matrix.h5"
+    - sample_id: "AC-8"
+      h5: "/STORAGE/csbig/jruiz/Single_cell_CaCu/raw_data/E-MTAB-15983/counts/AC-8_sample_feature_bc_matrix.h5"
+    - sample_id: "ASC-1"
+      h5: "/STORAGE/csbig/jruiz/Single_cell_CaCu/raw_data/E-MTAB-15983/counts/ASC-1_sample_feature_bc_matrix.h5"
+    - sample_id: "ASC-2"
+      h5: "/STORAGE/csbig/jruiz/Single_cell_CaCu/raw_data/E-MTAB-15983/counts/ASC-2_sample_feature_bc_matrix.h5"
+    - sample_id: "SCC-1"
+      h5: "/STORAGE/csbig/jruiz/Single_cell_CaCu/raw_data/E-MTAB-15983/counts/SCC-1_sample_feature_bc_matrix.h5"
+    - sample_id: "SCC-2"
+      h5: "/STORAGE/csbig/jruiz/Single_cell_CaCu/raw_data/E-MTAB-15983/counts/SCC-2_sample_feature_bc_matrix.h5"
+    - sample_id: "SCC-3"
+      h5: "/STORAGE/csbig/jruiz/Single_cell_CaCu/raw_data/E-MTAB-15983/counts/SCC-3_sample_feature_bc_matrix.h5"
+    - sample_id: "SCC-4"
+      h5: "/STORAGE/csbig/jruiz/Single_cell_CaCu/raw_data/E-MTAB-15983/counts/SCC-4_sample_feature_bc_matrix.h5"
+    - sample_id: "SCC-5"
+      h5: "/STORAGE/csbig/jruiz/Single_cell_CaCu/raw_data/E-MTAB-15983/counts/SCC-5_sample_feature_bc_matrix.h5"
+    - sample_id: "SCC-6"
+      h5: "/STORAGE/csbig/jruiz/Single_cell_CaCu/raw_data/E-MTAB-15983/counts/SCC-6_sample_feature_bc_matrix.h5"
+
+pipeline:
+  cleaner1: "tenx_h5_multi"
+
+output:
+  h5ad: "out/E-MTAB-15983/raw.h5ad"

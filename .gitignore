@@ -1,4 +1,5 @@
 out/
+logs/
 .snakemake/
 .snakemake_envs/
 __pycache__/
