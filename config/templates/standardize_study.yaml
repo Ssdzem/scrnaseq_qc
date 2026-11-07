@@ -42,6 +42,11 @@ input:
     mito_gene_prefix: "MT-"
     miqc_posterior_cutoff: 0.75
     doublet_score_threshold: 0.25
+    # Optional absolute limits on top of the per-sample MAD bounds. MAD adapts to each
+    # sample, so a poor sample gets loose bounds; these hold the line for every sample.
+    # Leave them out to rely on MAD alone.
+    # min_genes: 200
+    # max_pct_counts_mt: 5
 
 pipeline:
   cleaner1: "count_matrix_10x_multi_runs"

@@ -49,6 +49,10 @@ TRIMMING_TABLE_COLUMNS = [
     "pct_counts_mt_upper_bound",
     "pct_counts_mt_upper_k",
     "pct_counts_mt_removed",
+    "min_genes",
+    "min_genes_removed",
+    "max_pct_counts_mt",
+    "max_pct_counts_mt_removed",
 ]
 
 
@@ -109,7 +113,20 @@ def _read_qc_config(study_spec: dict) -> dict | None:
         "mito_gene_prefix": str(qc.get("mito_gene_prefix", "MT-")),
         "miqc_posterior_cutoff": float(qc.get("miqc_posterior_cutoff", 0.75)),
         "doublet_score_threshold": float(qc.get("doublet_score_threshold", 0.25)),
+        # Optional absolute floors on top of the per-sample MAD bounds. MAD adapts to
+        # each sample, so in a poor sample it accepts what it should remove.
+        "min_genes": _optional_number(qc.get("min_genes")),
+        "max_pct_counts_mt": _optional_number(qc.get("max_pct_counts_mt")),
     }
+
+
+def _optional_number(value) -> float | None:
+    if value is None or str(value).strip() == "":
+        return None
+    number = float(value)
+    if number < 0:
+        raise SystemExit(f"QC limits must be non-negative, got {value!r}")
+    return number
 
 
 def _mad_bounds(values: pd.Series, k: float) -> tuple[float, float, float, float]:
@@ -305,6 +322,21 @@ def _apply_sample_mad_qc(
             f"upper<={mt_upper:.3f} (upper_k={mito_upper_k:.2f}), removed={(~mt_mask).sum()}"
         )
     )
+
+    for key, metric, keep_if in (
+        ("min_genes", "n_genes_by_counts", lambda values, limit: values >= limit),
+        ("max_pct_counts_mt", mt_metric, lambda values, limit: values <= limit),
+    ):
+        limit = qc_cfg.get(key)
+        stats[key] = limit
+        if limit is None:
+            stats[f"{key}_removed"] = 0
+            continue
+        values = a.obs[metric].to_numpy(dtype=float)
+        limit_mask = np.isfinite(values) & keep_if(values, limit)
+        combined_mask &= limit_mask
+        stats[f"{key}_removed"] = int((~limit_mask).sum())
+        threshold_report.append(f"{key}={limit:g}, removed={(~limit_mask).sum()}")
 
     miqc_keep, miqc_stats = _run_miqc_like_filter(a, qc_cfg=qc_cfg, sample_id=sample_id, log=log)
     combined_mask &= miqc_keep

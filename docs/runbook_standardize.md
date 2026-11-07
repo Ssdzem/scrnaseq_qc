@@ -24,6 +24,9 @@ Important per-study knobs:
 
 - `pipeline`: cleaner sequence.
 - `input.*`: raw files to unpack/standardize.
+- `input.qc`: per-sample MAD filtering (`k`, `mito_upper_k`), miQC and doublet scoring.
+  Optional `min_genes` and `max_pct_counts_mt` add absolute limits on top of MAD.
+  Leave the block out to keep every cell.
 - `input.workers`: Snakemake threads and script workers.
 - `input.mem_mb`: optional Snakemake memory resource.
 
