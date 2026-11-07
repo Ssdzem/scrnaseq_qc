@@ -1,20 +1,24 @@
+# Versions are pinned: unpinned, this env once solved to scanpy 1.11.5 with scipy 1.17.1,
+# whose scrublet crashes, and pynndescent 0.7 breaks scanpy's neighbour graph. Change a pin only after rerunning a real study.
 name: integration_annotation_py
 channels:
   - conda-forge
   - bioconda
 dependencies:
-  - python=3.11
-  - scanpy>=1.10
-  - anndata>=0.12.5
-  - pandas>=2.1,!=2.1.2
-  - numpy
-  - scipy
-  - pyyaml
-  - harmonypy
-  - python-igraph
-  - leidenalg
+  - python=3.12
+  - scanpy=1.12.1
+  # pynndescent 0.7 returns sparse arrays that scanpy 1.12.1 cannot read (no .getnnz).
+  - pynndescent=0.5.13
+  - anndata=0.12.18
+  - pandas=2.3.3
+  - numpy=2.4.6
+  - scipy=1.18.0
+  - pyyaml=6.0.3
+  - harmonypy=2.1.0
+  - python-igraph=1.0.0
+  - leidenalg=0.12.0
   - pip
   - pip:
-      - "scvi-tools>=1.3"
-      - "symphonypy>=0.2.1"
-      - "scib"
+      - "scvi-tools==1.4.2"
+      - "symphonypy==0.2.4"
+      - "scib==1.1.7"
