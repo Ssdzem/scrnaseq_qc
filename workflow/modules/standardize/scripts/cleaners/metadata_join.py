@@ -30,7 +30,6 @@ def _find_metadata_catalog(*, inp: dict, study: str, log: TextIO) -> Path | None
 
     candidates = [
         Path("config/liver_scRNAseq_metadata_everything.csv"),
-        Path("a1_p1_qc/config/liver_scRNAseq_metadata_everything.csv"),
     ]
     for p in candidates:
         if p.exists():

@@ -608,12 +608,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--metadata",
-        default="~/phd_coding/a1_p1_qc/config/liver_scRNAseq_metadata.merged.csv",
+        default="config/liver_scRNAseq_metadata_everything.csv",
         help="Metadata CSV with study_accession/raw_uri/processed_uri",
     )
     parser.add_argument(
         "--out-root",
-        default="~/phd_coding/a1_p1_qc/data",
+        default="data",
         help="Output root directory",
     )
 

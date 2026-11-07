@@ -29,13 +29,11 @@ if _cfg is None:
 
 configfile: _cfg
 
-# The module is meant to be run from the `a1_p1_qc/` directory.
-# If invoked via `-s workflow/modules/fetch/Snakefile` from elsewhere,
-# Snakemake's path resolution can become ambiguous.
-if os.path.basename(os.getcwd()) != "a1_p1_qc":
+# Paths are relative to the repository root, whatever its directory is called.
+if not os.path.isdir(os.path.join("workflow", "modules", "fetch")):
     raise WorkflowError(
-        "Run the fetch module from the a1_p1_qc directory, e.g. `cd a1_p1_qc` "
-        "and then `snakemake -s workflow/modules/fetch/Snakefile ...`."
+        "Run the fetch module from the repository root, "
+        "e.g. `snakemake -s workflow/modules/fetch/Snakefile ...`."
     )
 
 
@@ -47,7 +45,7 @@ _cfg_root = os.path.dirname(_cfg)
 _project_root_cfg = config.get("paths", {}).get("project_root", ".")
 
 # `project_root` is treated as repo-root relative for this project.
-# In practice this means running from `a1_p1_qc/` should keep relative paths
+# In practice this means running from the repository root keeps relative paths
 # like `config/...` resolving as expected.
 PROJECT_ROOT = _norm(os.getcwd())
 

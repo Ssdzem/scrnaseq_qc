@@ -23,10 +23,11 @@ if _cfg is None:
 
 configfile: _cfg
 
-if os.path.basename(os.getcwd()) != "a1_p1_qc":
+# Paths are relative to the repository root, whatever its directory is called.
+if not os.path.isdir(os.path.join("workflow", "modules", "fastq_prepros")):
     raise WorkflowError(
-        "Run the fastq_prepros module from the a1_p1_qc directory, e.g. `cd a1_p1_qc` "
-        "and then `snakemake -s workflow/modules/fastq_prepros/Snakefile ...`."
+        "Run the fastq_prepros module from the repository root, "
+        "e.g. `snakemake -s workflow/modules/fastq_prepros/Snakefile ...`."
     )
 
 
