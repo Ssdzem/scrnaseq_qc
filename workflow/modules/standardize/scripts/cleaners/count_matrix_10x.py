@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import gzip
+import tempfile
 import shutil
 from collections.abc import Callable
 from pathlib import Path
@@ -289,6 +290,33 @@ def _write_genes_from_features(features_tsv_gz: Path, genes_tsv_gz: Path) -> Non
 
 
 def run_count_matrix_10x(*, study: str, study_spec: dict, output_h5ad: Path, log: TextIO) -> None:
+    """Read one triplet without ever writing next to it.
+
+    The triplet is normalized (compression, file names, 10x v2/v3 gene columns) on a
+    copy in a staging folder beside the output, which is removed afterwards. Inputs
+    are often another pipeline's published results, and changing them in place breaks
+    that pipeline's checksums and makes its scheduler see them as updated.
+    """
+    inp = study_spec.get("input", {})
+    sources = {key: _require_path(inp.get(key), key) for key in ("matrix", "genes", "barcodes")}
+    output_h5ad.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=f".{study}.triplet.", dir=output_h5ad.parent))
+    try:
+        staged = {}
+        for key, source in sources.items():
+            # Keep each file's own name: the normalizer recognizes formats by name.
+            target = staging / source.name
+            if target.exists():
+                raise SystemExit(f"Two triplet inputs share the file name {source.name}")
+            shutil.copyfile(source, target)
+            staged[key] = str(target)
+        staged_spec = {**study_spec, "input": {**inp, **staged}}
+        _run_count_matrix_10x_staged(study=study, study_spec=staged_spec, output_h5ad=output_h5ad, log=log)
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
+
+
+def _run_count_matrix_10x_staged(*, study: str, study_spec: dict, output_h5ad: Path, log: TextIO) -> None:
     inp = study_spec.get("input", {})
     matrix = _require_path(inp.get("matrix"), "matrix")
     genes = _require_path(inp.get("genes"), "genes")
@@ -298,7 +326,7 @@ def run_count_matrix_10x(*, study: str, study_spec: dict, output_h5ad: Path, log
     log.write(f"[{study}] Reading MTX triplet\n")
     log.flush()
 
-    # Normalize in-place so downstream always sees a standard 10x directory.
+    # Normalize the staged copy so downstream always sees a standard 10x directory.
     # This also avoids Scanpy's sensitivity to mixed compression and prefixes.
     _normalize_10x_triplet_inplace(matrix=matrix, genes=genes, barcodes=barcodes, log=log)
 
