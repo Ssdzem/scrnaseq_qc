@@ -1,23 +1,20 @@
 reference_atlas:
-  # Default/template label-transfer profile: broad Liver Cell Atlas tier-1 labels on CPU.
-  enabled: true
-  zip_url: "https://www.livercellatlas.org/data_files/toDownload/rawData_human.zip"
-  # P1-IA-05 — pinned 2026-09-14. Measured on the files this project's labels were
-  # built from; the deposit reports Last-Modified: Tue, 22 Feb 2022 (static, not rolling).
-  # A mismatch is FATAL in fetch_reference_atlas._download: every cell-type label in the
-  # project descends from these two files, so a silent upstream change would relabel
-  # everything. Omit a key to skip verification for that URL.
-  sha256:
-    zip: "f18f7e696164a947cbd0d198ce5da56c7f66a3e0cf06a9820cde77f0ef4fb995"
-  metadata_url: "https://www.livercellatlas.org/data_files/toDownload/annot_humanAll.csv"
+  # No reference by default, because labels from the wrong tissue would look plausible.
+  # Set this in your profile; see the lca_* templates for a complete example.
+  enabled: false
+  zip_url: ""
+  metadata_url: ""
+  # Optional sha256 per download. A mismatch stops the build, because every label
+  # descends from these files.
+  sha256: {}
   cache_dir: "data/ref/cache"
-  extract_dir: "data/ref/rawData_human"
-  matrix_subdir: "countTable_human"
+  extract_dir: "data/ref/atlas"
+  matrix_subdir: ""
   metadata_join_key: "cell"
   metadata_label_col: "annot"
-  output_h5ad: "data/ref/lca_human_tier1_reference.h5ad"
-  report: "data/ref/reference_build_report.tier1.json"
-  ready_marker: "data/ref/.reference_tier1_ready"
+  output_h5ad: "data/ref/reference.h5ad"
+  report: "data/ref/reference_build_report.json"
+  ready_marker: "data/ref/.reference_ready"
 
 integration:
   # Enable an integration backend. If false, uses PCA for graph/UMAP/Leiden.
@@ -95,7 +92,8 @@ integration:
 
 annotation:
   # Strategy options: "from_existing_column", "from_leiden", "symphony", or "scanvi".
-  method: "scanvi"
+  # The default only names clusters; symphony and scanvi need a reference_atlas.
+  method: "from_leiden"
   source_column: "cell_type"
   # Empty target_column writes to {annotation_method}_predicted_cell_type.
   target_column: "tier_1_cell_type"

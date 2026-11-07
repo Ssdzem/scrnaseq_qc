@@ -21,7 +21,9 @@ Run from the repository root, one module at a time:
 snakemake --profile profiles/local -s workflow/modules/standardize/Snakefile -n -p standardize_all
 ```
 
-Everything specific to a run belongs in a profile: studies, thresholds, reference atlas,
-memory, CPU or GPU. See `profiles/README.md` for how profiles work and `docs/README.md`
+Nothing here is tied to a project. Everything specific to a run belongs in a profile kept
+outside this repository: studies, thresholds, reference atlas, memory, CPU or GPU. Start
+from `config/templates/samples.csv`, `config/templates/standardize_study.yaml` and the
+templates in `profiles/`. See `profiles/README.md` for how profiles work and `docs/README.md`
 for each module's runbook. Conda environments are not fully pinned, so record the exact
 solve of each run.

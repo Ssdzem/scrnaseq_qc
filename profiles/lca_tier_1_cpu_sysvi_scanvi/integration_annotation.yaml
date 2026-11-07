@@ -1,7 +1,10 @@
 reference_atlas:
-  # Default/template label-transfer profile: broad Liver Cell Atlas tier-1 labels on CPU.
+  # Template: broad Liver Cell Atlas labels on CPU.
   enabled: true
   zip_url: "https://www.livercellatlas.org/data_files/toDownload/rawData_human.zip"
+  # sha256 of the deposit this template was validated on. A mismatch stops the build.
+  sha256:
+    zip: "f18f7e696164a947cbd0d198ce5da56c7f66a3e0cf06a9820cde77f0ef4fb995"
   metadata_url: "https://www.livercellatlas.org/data_files/toDownload/annot_humanAll.csv"
   cache_dir: "data/ref/cache"
   extract_dir: "data/ref/rawData_human"

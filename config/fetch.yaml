@@ -8,7 +8,7 @@ paths:
   project_root: "."
 
   # Metadata CSV used to determine which studies to fetch.
-  metadata_csv: "config/liver_scRNAseq_metadata_everything.csv"
+  metadata_csv: "config/samples.csv"
 
   # Output root directory. Per-study subdirectories are created under here.
   out_root: "out"
@@ -17,7 +17,7 @@ paths:
   module_dir: "workflow/modules/fetch"
 
 aspera:
-  # For GSA/CNCB downloads like HRA007511.
+  # For GSA/CNCB downloads.
   # Fill these paths in on your machine, or set env vars at runtime.
   #   export ASCP_PATH=/path/to/ascp
   #   export ASCP_KEY=/path/to/asperaweb_id_dsa.openssh

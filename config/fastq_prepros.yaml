@@ -1,12 +1,12 @@
 # Configuration for the `fastq_prepros` module.
 
 paths:
-  metadata_csv: "config/liver_scRNAseq_metadata_everything.csv"
+  metadata_csv: "config/samples.csv"
   out_root: "out"
 
 fastq_prepros:
-  studies:
-    - HRA007511
+  # Singleron studies to count, set by your profile.
+  studies: []
 
   # Desired output granularity.
   # - run: one count matrix per run_id

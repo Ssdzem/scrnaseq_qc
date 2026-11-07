@@ -133,6 +133,12 @@ def _ensure_composite_obs_key(adata, key: str, components: list[str], sep: str =
     composite = parts[0]
     for series in parts[1:]:
         composite = composite + sep + series
+    if key in adata.obs.columns and not adata.obs[key].astype(str).equals(composite.astype(str)):
+        raise ValueError(
+            f"Refusing to overwrite obs['{key}'] with a composite of {components}. "
+            "Use a new column name for the key, or leave the components empty to use "
+            f"obs['{key}'] as it is."
+        )
     adata.obs[key] = pd.Categorical(composite)
 
 
@@ -247,7 +253,7 @@ def run_integration(adata, cfg: dict, scope_label: str):
     early_stopping_monitor = str(cfg.get("early_stopping_monitor", "elbo_validation"))
     early_stopping_patience = int(cfg.get("early_stopping_patience", 20))
     dl_num_workers = int(cfg.get("dl_num_workers", 4))
-    num_threads = int(os.environ.get("A1_P1_IA_NUM_THREADS", cfg.get("num_threads", 16)))
+    num_threads = int(os.environ.get("SCRNASEQ_QC_IA_NUM_THREADS", cfg.get("num_threads", 16)))
     use_gpu = _as_bool(cfg.get("use_gpu", False))
     require_gpu = _as_bool(cfg.get("require_gpu", False))
     accelerator = str(cfg.get("accelerator", "gpu" if use_gpu else "cpu")).strip().lower()
@@ -264,6 +270,8 @@ def run_integration(adata, cfg: dict, scope_label: str):
         ensure_obs_key(adata, scvi_batch_key, scope_label)
     _require_obs_keys(adata, batch_keys_for_reporting)
     _sanitize_categorical_obs(adata, [scvi_batch_key, *categorical_covariate_keys])
+    if adata.obs[scvi_batch_key].nunique() < 2:
+        logging.warning("obs['%s'] has one value, so integration corrects nothing", scvi_batch_key)
 
     adata_hvg, hvg_var_names = _prepare_hvg_view(adata, hvg_key)
     if "log1p" not in adata_hvg.layers:

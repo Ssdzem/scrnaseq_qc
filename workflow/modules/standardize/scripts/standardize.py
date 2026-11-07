@@ -177,12 +177,12 @@ def _resolve_workers(*, study_spec: dict, cli_workers: int | None) -> int:
     if cli_workers is not None:
         return max(1, int(cli_workers))
 
-    env_workers = os.getenv("A1_P1_STANDARDIZE_WORKERS")
+    env_workers = os.getenv("SCRNASEQ_QC_STANDARDIZE_WORKERS")
     if env_workers is not None and str(env_workers).strip():
         try:
             return max(1, int(env_workers))
         except ValueError as exc:
-            raise SystemExit("A1_P1_STANDARDIZE_WORKERS must be an integer >= 1") from exc
+            raise SystemExit("SCRNASEQ_QC_STANDARDIZE_WORKERS must be an integer >= 1") from exc
 
     inp = study_spec.get("input") or {}
     spec_workers = inp.get("workers")

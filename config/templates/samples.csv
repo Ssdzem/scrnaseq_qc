@@ -1,0 +1,4 @@
+sample_id,study_accession,donor_id,run_id,include,exclude_reason,condition,age_years,sex,assay,platform,chemistry,tissue,processed_counts,raw_counts,fastq_r1,fastq_r2
+SAMPLE_1,STUDY_A,DONOR_1,RUN_1,True,,healthy,45,female,scRNA,10x,v3,liver,,https://example.org/STUDY_A_RAW.tar,,
+SAMPLE_2,STUDY_B,DONOR_2,RUN_2,True,,disease,60,male,snRNA,10x,v3,liver,,,https://example.org/RUN_2_R1.fastq.gz,https://example.org/RUN_2_R2.fastq.gz
+SAMPLE_3,STUDY_B,DONOR_3,RUN_3,False,failed sequencing,disease,52,male,snRNA,10x,v3,liver,,,https://example.org/RUN_3_R1.fastq.gz,https://example.org/RUN_3_R2.fastq.gz

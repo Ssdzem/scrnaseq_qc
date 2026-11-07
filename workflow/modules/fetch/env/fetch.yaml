@@ -1,4 +1,4 @@
-name: a1_p1_qc_fetch
+name: scrnaseq_qc_fetch
 channels:
   - conda-forge
   - bioconda

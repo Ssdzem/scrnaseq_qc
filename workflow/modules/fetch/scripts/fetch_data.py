@@ -255,7 +255,7 @@ def _best_level_for_url(url: str, row: Dict[str, str]) -> str:
         token_lc = token.lower()
         # Match token as a standalone chunk bounded by non-alphanumeric chars.
         # This avoids false positives like donor_id="3" matching inside
-        # ".../GSE202379/...".
+        # ".../<study>/...".
         pattern = rf"(?<![a-z0-9]){re.escape(token_lc)}(?![a-z0-9])"
         return re.search(pattern, url_lc) is not None
 
@@ -608,7 +608,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--metadata",
-        default="config/liver_scRNAseq_metadata_everything.csv",
+        default="config/samples.csv",
         help="Metadata CSV with study_accession/raw_uri/processed_uri",
     )
     parser.add_argument(

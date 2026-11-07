@@ -107,7 +107,7 @@ def _compute_scib_for_embedding(adata, batch_key: str, label_key: str, embed_key
         "ilisi_": bool(cfg.get("ilisi", True)),
         "clisi_": bool(cfg.get("clisi", True)),
         "subsample": float(cfg.get("lisi_subsample", 0.5)),
-        "n_cores": int(os.environ.get("A1_P1_IA_EVAL_THREADS", cfg.get("n_cores", 1))),
+        "n_cores": int(os.environ.get("SCRNASEQ_QC_IA_EVAL_THREADS", cfg.get("n_cores", 1))),
         "type_": str(cfg.get("type", "embed")),
         "verbose": bool(cfg.get("verbose", False)),
     }
@@ -208,11 +208,20 @@ def compute_metrics(adata, cfg: dict) -> dict:
     return metrics
 
 
+def _json_safe(value):
+    """Let json.dumps write the numpy values that scanpy and scib return."""
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    if isinstance(value, np.generic):
+        return value.item()
+    raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
+
+
 def flatten_metrics(metrics: dict) -> pd.DataFrame:
     flat = {}
     for k, v in metrics.items():
         if isinstance(v, (dict, list)):
-            flat[k] = json.dumps(v, sort_keys=True)
+            flat[k] = json.dumps(v, sort_keys=True, default=_json_safe)
         else:
             flat[k] = v
     return pd.DataFrame([flat])
@@ -238,7 +247,7 @@ def main(argv: list[str] | None = None):
 
     out_json = Path(args.output_json)
     out_json.parent.mkdir(parents=True, exist_ok=True)
-    out_json.write_text(json.dumps(metrics, indent=2) + "\n", encoding="utf-8")
+    out_json.write_text(json.dumps(metrics, indent=2, default=_json_safe) + "\n", encoding="utf-8")
 
     out_csv = Path(args.output_csv)
     out_csv.parent.mkdir(parents=True, exist_ok=True)

@@ -26,4 +26,4 @@ Profiles set `profile_config_dir=profiles/<profile>`. Module configs resolve in 
 2. profile-local YAML, if present;
 3. default YAML under `config/`.
 
-See `profiles/README.md` for CPU/GPU profiles and `docs/runbook_*.md` for exact commands.
+Study specs and sample tables are not shipped: start from `config/templates/`. See `profiles/README.md` for CPU/GPU profiles and `docs/runbook_*.md` for exact commands.

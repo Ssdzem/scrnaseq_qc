@@ -29,7 +29,7 @@ def _find_metadata_catalog(*, inp: dict, study: str, log: TextIO) -> Path | None
         log.write(f"[{study}] WARNING: explicit metadata_catalog not found: {p}\n")
 
     candidates = [
-        Path("config/liver_scRNAseq_metadata_everything.csv"),
+        Path("config/samples.csv"),
     ]
     for p in candidates:
         if p.exists():

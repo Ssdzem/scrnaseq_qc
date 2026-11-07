@@ -18,7 +18,7 @@ Two archive shapes are supported, selected per study via the fetch config
              <out_root>/<study>/raw/<GSM>_<label>-raw_counts.csv.gz
 
 Usage (invoked by the fetch_extract rule):
-  python extract_raw_archive.py --study GSE136103 --format triplet --out-root out
+  python extract_raw_archive.py --study STUDY_A --format triplet --out-root out
 """
 
 from __future__ import annotations
@@ -96,7 +96,7 @@ def _extract_triplets(archive: Path, raw_root: Path) -> int:
             continue
         gsm, rest = mo.group(1), mo.group(2)
         out_dir = dest_root / gsm
-        if rest.endswith(".tar.gz"):  # nested per-sample archive (e.g. GSE181483)
+        if rest.endswith(".tar.gz"):  # nested per-sample archive
             n += _extract_nested(tf, m, out_dir)
             continue
         canon = _canonical(rest)
@@ -138,7 +138,7 @@ _EXTRACTORS = {
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--study", required=True, help="study accession, e.g. GSE136103")
+    ap.add_argument("--study", required=True, help="study accession")
     ap.add_argument("--format", required=True, choices=sorted(_EXTRACTORS),
                     help="archive layout (drives which cleaner the output feeds)")
     ap.add_argument("--out-root", default="out",

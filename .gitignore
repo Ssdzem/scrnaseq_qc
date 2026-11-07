@@ -18,3 +18,7 @@ profiles/*
 .claude/
 .codex/
 .omx/
+
+# A project's studies and sample tables belong to that project.
+config/standardize/
+config/samples.csv

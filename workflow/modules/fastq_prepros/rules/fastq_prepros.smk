@@ -68,8 +68,6 @@ OUT_ROOT = _maybe_relative("out_root")
 
 FASTQ_PREPROS_CFG = config.get("fastq_prepros", {})
 STUDIES = list(FASTQ_PREPROS_CFG.get("studies", []))
-if not STUDIES:
-    raise WorkflowError("config.fastq_prepros.studies is required (e.g. ['HRA007511'])")
 
 TARGET_LEVEL = str(FASTQ_PREPROS_CFG.get("target_level", "run")).strip().lower()
 if TARGET_LEVEL not in {"run", "sample"}:

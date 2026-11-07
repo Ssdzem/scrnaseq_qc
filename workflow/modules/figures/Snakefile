@@ -1,4 +1,4 @@
-# Snakefile for reproducible top-level a1_p1_qc figures.
+# Reproducible summary figures from the annotated object.
 
 
 def _figures_cfg() -> dict:
@@ -13,9 +13,9 @@ def _figures_h5ad() -> str:
     return "out/integration_annotation/all_studies/all_annotated.h5ad"
 
 
-P1_FIGURE_OUTPUTS = [
+FIGURE_OUTPUTS = [
     "out/figures/01_umap_study_accession.png",
-    "out/figures/02_unique_samples_by_fibrosis_stage.png",
+    "out/figures/02_unique_samples_by_group.png",
     "out/figures/03_unique_samples_by_study_accession.png",
     "out/figures/04_cell_type_study_composition.png",
     "out/figures/manifest.json",

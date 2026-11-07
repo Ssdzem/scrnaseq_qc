@@ -24,9 +24,9 @@ IA_RESOURCES_CFG = (IA_FULL_CFG.get("resources", {}) if isinstance(IA_FULL_CFG, 
 
 
 def _ia_reference_h5ad() -> str:
-    # The integration_annotation module intentionally uses the configured Liver Cell Atlas build target.
+    # Annotation always uses the atlas built from reference_atlas in the active config.
     # Annotation scripts receive this resolved path from Snakemake instead of accepting arbitrary atlas paths.
-    return str(IA_REFERENCE_CFG.get("output_h5ad", "data/ref/lca_human_reference.h5ad")).strip()
+    return str(IA_REFERENCE_CFG.get("output_h5ad", "data/ref/reference.h5ad")).strip()
 
 
 def _ia_reference_report() -> str:
@@ -82,7 +82,7 @@ def _studies_to_process():
     if studies:
         return list(studies)
 
-    meta = config.get("inputs", {}).get("metadata_csv") or "config/liver_scRNAseq_metadata_everything.csv"
+    meta = config.get("inputs", {}).get("metadata_csv") or "config/samples.csv"
     try:
         import csv
         import re

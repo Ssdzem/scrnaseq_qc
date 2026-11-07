@@ -145,8 +145,7 @@ def _fetch_extra_args() -> str:
     return " ".join(shlex.quote(a) for a in args)
 
 
-ROWS = read_rows(Path(METADATA_CSV))
-assert ROWS, f"No rows parsed from metadata: {METADATA_CSV}"
+ROWS = read_rows(Path(METADATA_CSV)) if Path(METADATA_CSV).exists() else []
 
 
 def _has_fastqs_for_study(study: str) -> bool:
@@ -162,7 +161,6 @@ def _has_fastqs_for_study(study: str) -> bool:
     return False
 
 STUDIES = sorted({r.get("study_accession", "").strip() for r in ROWS if r.get("study_accession")})
-assert STUDIES, f"No studies parsed from metadata: {METADATA_CSV}"
 
 RUNS_BY_STUDY = {}
 TRIPLES_BY_STUDY = {}
@@ -190,9 +188,8 @@ TRIPLES_BY_STUDY_FASTQS = {
 # map (set per profile, in its fetch.yaml):
 #
 #   extract:
-#     GSE136103: triplet   # per-sample 10x triplets
-#     GSE181483: triplet
-#     GSE168933: csv        # per-sample count CSVs
+#     STUDY_A: triplet   # per-sample 10x triplets
+#     STUDY_B: csv       # per-sample count CSVs
 #
 # Studies absent from the map keep the default fetch behaviour (no extraction),
 # so this is inert for the standard fastq/processed-matrix studies.

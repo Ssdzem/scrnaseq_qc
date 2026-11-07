@@ -109,8 +109,10 @@ def attach_metadata(
     metadata_columns = sorted({key for row in matched_rows for key in row.keys()})
 
     if not metadata_columns:
-        logging.warning("No metadata columns found to attach from %s", metadata_path)
-        return adata
+        raise ValueError(
+            f"No cell matched any row of {metadata_path}: check that its sample_id values "
+            "match the sample_id values in the standardized object."
+        )
 
     existing_cols = set(adata.obs.columns)
     for col in metadata_columns:
@@ -143,7 +145,7 @@ def main(argv: list[str] | None = None):
     logging.info("attach_metadata args: %s", vars(args))
 
     cfg = read_full_config(args.qc_config)
-    metadata_csv = cfg.get("inputs", {}).get("metadata_csv", "config/liver_scRNAseq_metadata_everything.csv")
+    metadata_csv = cfg.get("inputs", {}).get("metadata_csv", "config/samples.csv")
     metadata_rows = read_metadata_rows(metadata_csv)
 
     logging.info("Reading h5ad: %s", args.input)

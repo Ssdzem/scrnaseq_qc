@@ -68,7 +68,7 @@ def _studies_to_process():
     if studies:
         return list(studies)
 
-    meta = config.get("inputs", {}).get("metadata_csv") or "config/liver_scRNAseq_metadata_everything.csv"
+    meta = config.get("inputs", {}).get("metadata_csv") or "config/samples.csv"
     try:
         import csv
         import re

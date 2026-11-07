@@ -169,18 +169,18 @@ def _workers_for_study(study: str) -> int:
     """Resolve worker count for a study.
 
     Precedence:
-      1) env var A1_P1_STANDARDIZE_WORKERS
+      1) env var SCRNASEQ_QC_STANDARDIZE_WORKERS
       2) spec input.workers
       3) default 1
     """
-    env_workers = os.getenv("A1_P1_STANDARDIZE_WORKERS")
+    env_workers = os.getenv("SCRNASEQ_QC_STANDARDIZE_WORKERS")
     if env_workers is not None and str(env_workers).strip():
         try:
             workers = int(env_workers)
         except ValueError as exc:
-            raise WorkflowError("A1_P1_STANDARDIZE_WORKERS must be an integer >= 1") from exc
+            raise WorkflowError("SCRNASEQ_QC_STANDARDIZE_WORKERS must be an integer >= 1") from exc
         if workers < 1:
-            raise WorkflowError("A1_P1_STANDARDIZE_WORKERS must be an integer >= 1")
+            raise WorkflowError("SCRNASEQ_QC_STANDARDIZE_WORKERS must be an integer >= 1")
         return workers
 
     spec = _load_spec(study)
@@ -199,14 +199,14 @@ def _workers_for_study(study: str) -> int:
 
 
 def _mem_mb_for_study(study: str) -> int:
-    env_mem = os.getenv("A1_P1_STANDARDIZE_MEM_MB")
+    env_mem = os.getenv("SCRNASEQ_QC_STANDARDIZE_MEM_MB")
     if env_mem is not None and str(env_mem).strip():
         try:
             mem_mb = int(env_mem)
         except ValueError as exc:
-            raise WorkflowError("A1_P1_STANDARDIZE_MEM_MB must be an integer >= 1") from exc
+            raise WorkflowError("SCRNASEQ_QC_STANDARDIZE_MEM_MB must be an integer >= 1") from exc
         if mem_mb < 1:
-            raise WorkflowError("A1_P1_STANDARDIZE_MEM_MB must be an integer >= 1")
+            raise WorkflowError("SCRNASEQ_QC_STANDARDIZE_MEM_MB must be an integer >= 1")
         return mem_mb
 
     spec = _load_spec(study)

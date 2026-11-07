@@ -1,4 +1,4 @@
-name: integration_annotation_py
+name: scrnaseq_qc_figures
 channels:
   - conda-forge
   - bioconda

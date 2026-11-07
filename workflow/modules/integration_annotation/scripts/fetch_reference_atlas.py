@@ -13,9 +13,6 @@ import scanpy as sc
 import yaml
 
 
-DEFAULT_ZIP_URL = "https://www.livercellatlas.org/data_files/toDownload/rawData_human.zip"
-DEFAULT_METADATA_URL = "https://www.livercellatlas.org/data_files/toDownload/annot_humanAll.csv"
-
 
 def setup_logging(log_path: str | None):
     handlers: list[logging.Handler] = [logging.StreamHandler()]
@@ -47,17 +44,8 @@ def _sha256(path: Path) -> str:
 def _download(url: str, target: Path, expected_sha256: str | None = None):
     """Fetch `url` unless already cached, then verify against `expected_sha256`.
 
-    P1-IA-05: the Liver Cell Atlas is fetched from a live URL with no version, no date
-    and no checksum, and EVERY cell-type label in this project descends from it — tier-1
-    for the validation cohorts, tier-2 for the 7 macrophage subtypes behind
-    SMIF-Mono/SMIF-KC. The rule's only declared input is the config, so snakemake never
-    re-fetches once the marker exists and would never notice an upstream change.
-
-    Measured 2026-09-14: the deposit reports `Last-Modified: Tue, 22 Feb 2022`, i.e. it is
-    a static deposit rather than a rolling file — which is why the tier-1 labels on disk
-    and a re-download agree. That is a reason to pin it, not a reason not to.
-
-    A mismatch is fatal: silently continuing would relabel the whole project.
+    A mismatch is fatal: every cell-type label descends from these files, so continuing
+    would silently relabel the data.
     """
     target.parent.mkdir(parents=True, exist_ok=True)
     if target.exists() and target.stat().st_size > 0:
@@ -73,9 +61,8 @@ def _download(url: str, target: Path, expected_sha256: str | None = None):
                 f"checksum mismatch for {target}\n"
                 f"  expected {expected_sha256}\n  got      {got}\n"
                 f"  source   {url}\n"
-                "The Liver Cell Atlas deposit has changed, or the cached file is corrupt. "
-                "Every cell-type label in this project descends from it — resolve this "
-                "before re-running, and re-verify the labels if the upstream really moved."
+                "The reference deposit has changed, or the cached file is corrupt. Every "
+                "cell-type label descends from it, so resolve this before re-running."
             )
         logging.info("checksum OK (sha256 %s): %s", got[:16], target.name)
 
@@ -244,10 +231,12 @@ def build_reference_anndata(full_cfg: dict, output_h5ad: str) -> tuple[object, d
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     cache_dir = Path(str(ref_cfg.get("cache_dir", "data/ref/cache")))
-    extract_dir = Path(str(ref_cfg.get("extract_dir", "data/ref/rawData_human")))
+    extract_dir = Path(str(ref_cfg.get("extract_dir", "data/ref/atlas")))
 
-    zip_url = str(ref_cfg.get("zip_url", DEFAULT_ZIP_URL)).strip()
-    metadata_url = str(ref_cfg.get("metadata_url", DEFAULT_METADATA_URL)).strip()
+    zip_url = str(ref_cfg.get("zip_url", "")).strip()
+    metadata_url = str(ref_cfg.get("metadata_url", "")).strip()
+    if not zip_url or not metadata_url:
+        raise ValueError("reference_atlas.zip_url and metadata_url must both be set")
     matrix_subdir = str(ref_cfg.get("matrix_subdir", "countTable_human")).strip()
     metadata_join_key = str(ref_cfg.get("metadata_join_key", "cell")).strip()
     metadata_label_col = str(ref_cfg.get("metadata_label_col", "annot")).strip()

@@ -1,4 +1,4 @@
-name: a1_p1_qc_standardize
+name: scrnaseq_qc_standardize
 channels:
   - conda-forge
   - bioconda

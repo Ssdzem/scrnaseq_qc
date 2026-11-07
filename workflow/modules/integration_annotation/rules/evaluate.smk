@@ -18,7 +18,7 @@ rule ia_evaluate_all:
     shell:
         r"""
         mkdir -p $(dirname {log})
-        A1_P1_IA_EVAL_THREADS={threads} OMP_NUM_THREADS={threads} OPENBLAS_NUM_THREADS={threads} MKL_NUM_THREADS={threads} \
+        SCRNASEQ_QC_IA_EVAL_THREADS={threads} OMP_NUM_THREADS={threads} OPENBLAS_NUM_THREADS={threads} MKL_NUM_THREADS={threads} \
         PYTHONNOUSERSITE=1 $CONDA_PREFIX/bin/python -s workflow/modules/integration_annotation/scripts/evaluate_integration.py \
           --scope all_studies \
           --input {input.annotated} \
@@ -53,7 +53,7 @@ rule ia_evaluate_study:
     shell:
         r"""
         mkdir -p $(dirname {log})
-        A1_P1_IA_EVAL_THREADS={threads} OMP_NUM_THREADS={threads} OPENBLAS_NUM_THREADS={threads} MKL_NUM_THREADS={threads} \
+        SCRNASEQ_QC_IA_EVAL_THREADS={threads} OMP_NUM_THREADS={threads} OPENBLAS_NUM_THREADS={threads} MKL_NUM_THREADS={threads} \
         PYTHONNOUSERSITE=1 $CONDA_PREFIX/bin/python -s workflow/modules/integration_annotation/scripts/evaluate_integration.py \
           --scope study \
           --study {params.study} \

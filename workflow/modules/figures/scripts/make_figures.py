@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Recreate the ordered a1_p1_qc figure set from canonical pipeline objects.
+"""Recreate the ordered scrnaseq_qc figure set from canonical pipeline objects.
 
 Each figure has a stable, semantic filename and is written as both a
 publication-ready vector PDF and a PNG preview, alongside a ``manifest.json``
@@ -68,23 +68,23 @@ FIGURES: tuple[FigureSpec, ...] = (
         title="study_accession UMAP",
         source_object="integration_annotation H5AD: .obs['study_accession'] + .obsm['X_umap']",
         structure="cell-level AnnData object with UMAP coordinates and study metadata",
-        represents="Integrated myeloid/liver cell embedding colored by source study accession.",
+        represents="Integrated cell embedding colored by source study accession.",
         pipeline_position="After integration/annotation has produced the all-study annotated object.",
     ),
     FigureSpec(
         order=2,
-        filename="02_unique_samples_by_fibrosis_stage.png",
-        title="Unique samples by fibrosis stage",
-        source_object="configured metadata CSV: config/liver_scRNAseq_metadata_everything.csv filtered to include truthy rows",
-        structure="included sample-level metadata table grouped by fibrosis_stage",
-        represents="Number of included distinct samples per fibrosis stage.",
+        filename="02_unique_samples_by_group.png",
+        title="Unique samples by group",
+        source_object="configured metadata CSV: config/samples.csv filtered to include truthy rows",
+        structure="included sample-level metadata table grouped by --group-column",
+        represents="Number of included distinct samples per group.",
         pipeline_position="Metadata summary / cohort composition diagnostic.",
     ),
     FigureSpec(
         order=3,
         filename="03_unique_samples_by_study_accession.png",
         title="Unique samples by study accession",
-        source_object="configured metadata CSV: config/liver_scRNAseq_metadata_everything.csv filtered to include truthy rows",
+        source_object="configured metadata CSV: config/samples.csv filtered to include truthy rows",
         structure="included sample-level metadata table grouped by study_accession",
         represents="Number of included distinct samples contributed by each study accession.",
         pipeline_position="Metadata summary / cohort composition diagnostic.",
@@ -256,19 +256,17 @@ def plot_umap_study_accession(args: argparse.Namespace, spec: FigureSpec) -> Pat
     return _save_fig(fig, args.out_dir / spec.filename)
 
 
-def plot_unique_samples_by_fibrosis(args: argparse.Namespace, spec: FigureSpec) -> Path:
+def plot_unique_samples_by_group(args: argparse.Namespace, spec: FigureSpec) -> Path:
     _np, pd, _plt = _import_plotting()
-    df = _load_metadata_counts(args.metadata_csv, "fibrosis_stage", pd)
-    order = ["F0", "F1", "F2", "F3", "F4"]
-    df["_order"] = df["fibrosis_stage"].astype(str).map({v: i for i, v in enumerate(order)}).fillna(999)
-    df = df.sort_values(["_order", "fibrosis_stage"]).drop(columns="_order")
+    group = args.group_column
+    df = _load_metadata_counts(args.metadata_csv, group, pd).sort_values(group)
     out = args.out_dir / spec.filename
     _save_bar_with_labels(
         df,
-        x_col="fibrosis_stage",
+        x_col=group,
         y_col="unique_sample_count",
-        title="Unique samples by fibrosis stage",
-        xlabel="Fibrosis stage",
+        title=f"Unique samples by {group}",
+        xlabel=group,
         ylabel="Unique sample_id count",
         out=out,
         color="#4C78A8",
@@ -316,7 +314,7 @@ def plot_cell_type_study_composition(args: argparse.Namespace, spec: FigureSpec)
 
 PLOTTERS: dict[int, Callable[[argparse.Namespace, FigureSpec], Path]] = {
     1: plot_umap_study_accession,
-    2: plot_unique_samples_by_fibrosis,
+    2: plot_unique_samples_by_group,
     3: plot_unique_samples_by_study,
     4: plot_cell_type_study_composition,
 }
@@ -324,7 +322,7 @@ PLOTTERS: dict[int, Callable[[argparse.Namespace, FigureSpec], Path]] = {
 
 def _write_manifest(args: argparse.Namespace, outputs: list[Path]) -> Path:
     manifest = {
-        "module": "a1_p1_qc.figures",
+        "module": "scrnaseq_qc.figures",
         "out_dir": str(args.out_dir),
         "h5ad": str(args.h5ad),
         "metadata_csv": str(args.metadata_csv),
@@ -333,7 +331,7 @@ def _write_manifest(args: argparse.Namespace, outputs: list[Path]) -> Path:
         "source_contracts": {
             "study_column": "study_accession",
             "cell_type_column": "tier_1_cell_type",
-            "metadata_required_columns": ["sample_id", "include", "fibrosis_stage", "study_accession"],
+            "metadata_required_columns": ["sample_id", "include", args.group_column, "study_accession"],
         },
         "figures": [
             {
@@ -357,7 +355,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         type=Path,
         default=Path("out/integration_annotation/all_studies/all_annotated.h5ad"),
     )
-    parser.add_argument("--metadata-csv", type=Path, default=Path("config/liver_scRNAseq_metadata_everything.csv"))
+    parser.add_argument("--metadata-csv", type=Path, default=Path("config/samples.csv"))
+    parser.add_argument("--group-column", default="condition", help="Metadata column for figure 2")
     parser.add_argument("--out-dir", type=Path, default=Path("out/figures"))
     parser.add_argument("--manifest", type=Path, default=Path("out/figures/manifest.json"))
     parser.add_argument("--only", type=int, choices=[spec.order for spec in FIGURES], action="append")
@@ -375,7 +374,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             continue
         outputs.append(PLOTTERS[spec.order](args, spec))
     _write_manifest(args, outputs)
-    print(f"Generated {len(outputs)} a1_p1_qc figure(s) into {args.out_dir}")
+    print(f"Generated {len(outputs)} scrnaseq_qc figure(s) into {args.out_dir}")
     return 0
 
 

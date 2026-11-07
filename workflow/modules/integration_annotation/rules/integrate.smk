@@ -20,7 +20,7 @@ rule ia_integrate_all:
     shell:
         r"""
         mkdir -p $(dirname {log})
-        A1_P1_IA_NUM_THREADS={threads} OMP_NUM_THREADS={threads} OPENBLAS_NUM_THREADS={threads} MKL_NUM_THREADS={threads} \
+        SCRNASEQ_QC_IA_NUM_THREADS={threads} OMP_NUM_THREADS={threads} OPENBLAS_NUM_THREADS={threads} MKL_NUM_THREADS={threads} \
         PYTHONNOUSERSITE=1 $CONDA_PREFIX/bin/python -s workflow/modules/integration_annotation/scripts/integrate_embeddings.py \
           --scope all_studies \
           --input {input.pre_integration} \
@@ -56,7 +56,7 @@ rule ia_integrate_study:
     shell:
         r"""
         mkdir -p $(dirname {log})
-        A1_P1_IA_NUM_THREADS={threads} OMP_NUM_THREADS={threads} OPENBLAS_NUM_THREADS={threads} MKL_NUM_THREADS={threads} \
+        SCRNASEQ_QC_IA_NUM_THREADS={threads} OMP_NUM_THREADS={threads} OPENBLAS_NUM_THREADS={threads} MKL_NUM_THREADS={threads} \
         PYTHONNOUSERSITE=1 $CONDA_PREFIX/bin/python -s workflow/modules/integration_annotation/scripts/integrate_embeddings.py \
           --scope study \
           --study {params.study} \

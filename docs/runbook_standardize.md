@@ -17,9 +17,8 @@ snakemake --profile profiles/local -s workflow/modules/standardize/Snakefile out
 
 ## Config
 
-Study specs live in `config/standardize/*.yaml`.
-
-Profile override: put specs in `profiles/<profile>/standardize/*.yaml` or pass `--config standardize_config_dir=<dir>`.
+Each study has one spec. Copy `config/templates/standardize_study.yaml` to
+`<your profile>/standardize/<study>.yaml`, or pass `--config standardize_config_dir=<dir>`.
 
 Important per-study knobs:
 
