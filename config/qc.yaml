@@ -1,22 +1,29 @@
 # QC configuration for the qc_preproc module.
-# These values are intended to be edited by the user.
+#
+# P1-QC-01 — READ THIS BEFORE WRITING A METHODS SECTION.
+# This file does NOT hold the project's cell-filtering thresholds. It once appeared to:
+# min_genes (200), min_counts (500), max_mito_frac (0.20), min_cells_per_gene (3) and
+# keep_doublets were listed here under a header inviting the user to edit them, but the
+# only code that read them — workflow/modules/qc_preproc/scripts/qc_scanpy.py, the sole
+# caller of sc.pp.filter_cells / filter_genes — was wired into no rule and never ran.
+# Editing them changed nothing. They have been REMOVED rather than wired, because the
+# real filtering already happens elsewhere and wiring them would double-filter.
+#
+# Where cells are ACTUALLY filtered, in order:
+#   1. standardize — per-study MAD (k=3), mito_upper_k 5 (validation) or 7
+#      (GSE256398, HRA007511 — see P1-STD-03), miQC 0.75, doublet score 0.25
+#   2. a1_p2_def qc_filter — min_genes 500/1000, max_genes 6000, min_total_counts 1000,
+#      max_pct_counts_mt 10, miQC 0.75
+#
+# A methods section written from the OLD version of this file would have stated a 20%
+# mitochondrial ceiling at this stage. The ceiling actually applied is per-study MAD
+# upstream and 10% downstream.
+#
+# What remains below IS live: mito_prefix/mito_prefixes_extra/make_figures drive
+# qc_figures.py (metrics and plots only, no filtering); hvg_*/scvi_batch_key/seed/
+# backend/require_gpu drive explore_scanpy.py.
 
 qc:
-  # Minimum number of genes detected in a cell.
-  min_genes: 200
-
-  # Minimum total UMI counts in a cell.
-  min_counts: 500
-
-  # Maximum fraction of mitochondrial counts (0-1).
-  max_mito_frac: 0.20
-
-  # Minimum number of cells a gene must be detected in.
-  min_cells_per_gene: 3
-
-  # Whether to keep (True) or drop (False) doublets (if computed).
-  keep_doublets: true
-
   # If True, infer mitochondrial genes as those starting with "MT-".
   mito_prefix: "MT-"
 
