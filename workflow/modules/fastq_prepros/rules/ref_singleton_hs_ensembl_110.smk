@@ -53,8 +53,12 @@ rule download_ensembl_fasta_gtf:
         "out/logs/fastq_prepros/ref/download_ensembl_fasta_gtf.log",
     conda:
         "../env/fastq_prepros.yaml"
-    script:
-        "../scripts/ref_download_ensembl.py"
+    shell:
+        "python workflow/modules/fastq_prepros/scripts/ref_download_ensembl.py "
+        "--ref-dir {params.ref_dir} "
+        "--fasta-url {params.fasta_url} "
+        "--gtf-url {params.gtf_url} "
+        "> {log} 2>&1"
 
 
 rule gunzip_ensembl:
@@ -68,8 +72,13 @@ rule gunzip_ensembl:
         "out/logs/fastq_prepros/ref/gunzip_ensembl.log",
     conda:
         "../env/fastq_prepros.yaml"
-    script:
-        "../scripts/ref_gunzip.py"
+    shell:
+        "python workflow/modules/fastq_prepros/scripts/ref_gunzip.py "
+        "--fasta-gz {input.fasta_gz} "
+        "--gtf-gz {input.gtf_gz} "
+        "--fasta {output.fasta} "
+        "--gtf {output.gtf} "
+        "> {log} 2>&1"
 
 
 rule ensure_mt_gene_list:
@@ -79,8 +88,10 @@ rule ensure_mt_gene_list:
         "out/logs/fastq_prepros/ref/ensure_mt_gene_list.log",
     conda:
         "../env/fastq_prepros.yaml"
-    script:
-        "../scripts/ref_write_mt_gene_list.py"
+    shell:
+        "python workflow/modules/fastq_prepros/scripts/ref_write_mt_gene_list.py "
+        "--output {output.mt_gene_list} "
+        "> {log} 2>&1"
 
 
 rule celescope_mkgtf:
@@ -92,8 +103,11 @@ rule celescope_mkgtf:
         "out/logs/fastq_prepros/ref/celescope_mkgtf.log",
     conda:
         "../env/fastq_prepros.yaml"
-    script:
-        "../scripts/ref_mkgtf.py"
+    shell:
+        "python workflow/modules/fastq_prepros/scripts/ref_mkgtf.py "
+        "--gtf {input.gtf} "
+        "--filtered-gtf {output.filtered_gtf} "
+        "> {log} 2>&1"
 
 
 rule celescope_mkref:
@@ -110,5 +124,11 @@ rule celescope_mkref:
         "out/logs/fastq_prepros/ref/celescope_mkref.log",
     conda:
         "../env/fastq_prepros.yaml"
-    script:
-        "../scripts/ref_mkref.py"
+    shell:
+        "python workflow/modules/fastq_prepros/scripts/ref_mkref.py "
+        "--outdir {params.ref_dir} "
+        "--genome-name {params.genome_name} "
+        "--fasta {input.fasta} "
+        "--filtered-gtf {input.filtered_gtf} "
+        "--mt-gene-list {input.mt_gene_list} "
+        "> {log} 2>&1"

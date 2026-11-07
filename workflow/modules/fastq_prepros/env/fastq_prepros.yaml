@@ -21,4 +21,16 @@ dependencies:
   - pip
   - pandas
   - pip:
-      - celescope
+      # P1-FQ-02 — star/subread/samtools above are pinned; the thing that ORCHESTRATES
+      # all of them was not. CeleScope's version determines barcode/UMI handling, the
+      # soloCellFilter behaviour, and the output tree layout that
+      # config/standardize/HRA007511.yaml:9 hardcodes
+      # ({triplet_root}/.../shell/{run_id}/outs/filtered).
+      #
+      # HONEST LIMITATION: the version that produced the published HRA007511 counts is
+      # NOT RECOVERABLE — they were computed off-box and the count tree is not on this
+      # machine, so nothing records it. This pin therefore governs FUTURE runs; it does
+      # not reconstruct the published ones, and must not be described as doing so.
+      # On the first real FASTQ run, verify the output layout still matches that
+      # hardcoded path before trusting standardize.
+      - celescope==2.15.0
