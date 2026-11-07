@@ -41,7 +41,7 @@ inputs:
   studies: []
 
   # One row per sample or run; see config/templates/samples.csv.
-  metadata_csv: "config/liver_scRNAseq_metadata_everything.csv"
+  metadata_csv: "config/samples.csv"
 
 resources:
   preintegration_threads: 4

@@ -21,7 +21,8 @@ integration:
   enabled: true
   # Required before execution. Choose exactly one: "sysvi", "scvi", or "harmony".
   method: "sysvi"
-  # Primary batch/system key. For sysVI this can be generated from system_key_components below.
+  # Primary batch/system key. With system_key_components set, this must be a new column
+  # name. To correct on an existing column such as sample_id, leave the components empty.
   batch_key: "sysvi_system"
   # The standardized inputs do not carry a canonical `technology` column, so derive it from platform+chemistry.
   obs_key_aliases:
@@ -97,7 +98,7 @@ annotation:
   source_column: "cell_type"
   # Empty target_column writes to {annotation_method}_predicted_cell_type.
   target_column: "tier_1_cell_type"
-  legacy_alias: "scanvi_pred"
+  legacy_alias: ""
   unknown_label: "Unknown"
   symphony:
     # Reference h5ad is supplied by Snakemake from reference_atlas.output_h5ad.

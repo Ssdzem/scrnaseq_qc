@@ -86,6 +86,8 @@ if not CELESCOPE_STAR_INDEX:
 
 
 def _load_metadata() -> pd.DataFrame:
+    if not STUDIES:
+        return pd.DataFrame(columns=["study_accession", "sample_id"])
     df = pd.read_csv(METADATA_CSV)
     required = {"include", "study_accession", "platform", "donor_id", "sample_id", "run_id"}
     missing = required - set(df.columns)

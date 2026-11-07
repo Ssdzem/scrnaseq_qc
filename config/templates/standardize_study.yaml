@@ -33,6 +33,8 @@ input:
   # out/<study>/qc_raw/ first. Only the last cleaner, tenx_h5_multi, applies it, so
   # every pipeline should end with that cleaner. Use the same values across studies you
   # intend to compare, or state the difference in your methods.
+  # Doublets are scored into obs['doublet_score'] and obs['predicted_doublet'], not
+  # removed. Filter on them downstream if you want them gone.
   qc:
     method: "mad"
     k: 3
