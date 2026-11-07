@@ -1,0 +1,21 @@
+study: "GSE168933"
+
+# Validation cohort (held-out F0/F1 vs F3/F4). Per-sample count CSVs unpacked
+# from GSE168933_RAW.tar by the fetch module (rule fetch_extract, extract: csv)
+# and renamed to the csv_handler pattern (<GSM>_<label>-raw_counts.csv.gz).
+input:
+  raw_dir: "out/GSE168933/raw"
+  qc:
+    method: "mad"
+    k: 3
+    mito_upper_k: 5
+    mito_gene_prefix: "MT-"
+    miqc_posterior_cutoff: 0.75
+    doublet_score_threshold: 0.25
+
+pipeline:
+  cleaner1: "csv_handler"
+  cleaner2: "tenx_h5_multi"
+
+output:
+  h5ad: "out/GSE168933/raw.h5ad"

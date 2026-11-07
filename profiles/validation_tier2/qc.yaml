@@ -1,0 +1,60 @@
+# validation override for the qc_preproc module (full copy of config/qc.yaml).
+# Same QC thresholds as the default; only the metadata pointer is scoped to the
+# 3 held-out studies. CPU backend (no GPU on this box).
+
+qc:
+  # Minimum number of genes detected in a cell.
+  min_genes: 200
+
+  # Minimum total UMI counts in a cell.
+  min_counts: 500
+
+  # Maximum fraction of mitochondrial counts (0-1).
+  max_mito_frac: 0.20
+
+  # Minimum number of cells a gene must be detected in.
+  min_cells_per_gene: 3
+
+  # Whether to keep (True) or drop (False) doublets (if computed).
+  keep_doublets: true
+
+  # If True, infer mitochondrial genes as those starting with "MT-".
+  mito_prefix: "MT-"
+
+  # Optional: if provided, treat these prefixes as mitochondrial too.
+  mito_prefixes_extra: []
+
+  # Whether to run pre-filter QC plots.
+  make_figures: true
+
+  # Batch key used when selecting HVGs.
+  hvg_batch_key: "sample_id"
+
+  # Batch key used by scVI integration.
+  scvi_batch_key: "sample_id"
+
+  # Number of HVGs used for exploratory embeddings.
+  hvg_n_top_genes: 3000
+
+  # No GPU on this box.
+  backend: "cpu"
+
+  # If true and backend is "gpu" or "auto", fail instead of falling back when GPU is unavailable.
+  require_gpu: false
+
+  # Random seed for reproducibility.
+  seed: 0
+
+inputs:
+  # Process every study present in the validation metadata.
+  studies: []
+
+  # Held-out validation cohorts (F0/F4).
+  metadata_csv: "config/liver_scRNAseq_metadata_validation.csv"
+
+resources:
+  preintegration_threads: 4
+  preintegration_mem_mb: 32000
+  preintegration_gpu: 0
+  concat_threads: 4
+  concat_mem_mb: 64000
