@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, ThreadPoolExecutor, wait
 from pathlib import Path
@@ -587,9 +588,27 @@ def _prepare_sample_from_source_task(
     out_trim_json.parent.mkdir(parents=True, exist_ok=True)
     prepared.write_h5ad(out_h5ad)
     out_trim_json.write_text(json.dumps(trim_stats, indent=2, sort_keys=True), encoding="utf-8")
+    # Written last: a checkpoint is only reused when it was made from the same input
+    # with the same QC settings.
+    Path(str(task["out_fingerprint"])).write_text(str(task["fingerprint"]), encoding="utf-8")
     messages.append(f"Wrote sample checkpoint h5ad: {out_h5ad}")
     messages.append(f"Wrote sample trimming stats: {out_trim_json}")
     return idx, sample_id_out, str(out_h5ad), trim_stats, messages
+
+
+def _checkpoint_fingerprint(qc_cfg: dict | None, source_kind: str, source_value) -> str:
+    """Identify what a sample checkpoint was computed from: the QC settings and the
+    exact input file. Changing either must recompute the sample, never reuse it."""
+    source = Path(str(source_value)) if source_value else None
+    stat = source.stat() if source is not None and source.exists() else None
+    payload = {
+        "qc_cfg": qc_cfg,
+        "source_kind": source_kind,
+        "source": str(source.resolve()) if source is not None else None,
+        "source_bytes": stat.st_size if stat else None,
+        "source_mtime_ns": stat.st_mtime_ns if stat else None,
+    }
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()
 
 
 def run_tenx_h5_multi(*, study: str, study_spec: dict, output_h5ad: Path, log: TextIO, workers: int = 1) -> None:
@@ -620,11 +639,16 @@ def run_tenx_h5_multi(*, study: str, study_spec: dict, output_h5ad: Path, log: T
 
         checkpoint_h5ad = checkpoint_dir / f"{idx:03d}.{sample_id}.qc.h5ad"
         checkpoint_trim_json = checkpoint_dir / f"{idx:03d}.{sample_id}.trim.json"
+        checkpoint_fingerprint = checkpoint_dir / f"{idx:03d}.{sample_id}.fingerprint"
+        source_kind, source_value = ("h5", h5_val) if h5_val else ("h5ad", h5ad_val)
+        fingerprint = _checkpoint_fingerprint(qc_cfg, source_kind, source_value)
         if (
             checkpoint_h5ad.exists()
             and checkpoint_h5ad.stat().st_size > 0
             and checkpoint_trim_json.exists()
             and checkpoint_trim_json.stat().st_size > 0
+            and checkpoint_fingerprint.exists()
+            and checkpoint_fingerprint.read_text(encoding="utf-8") == fingerprint
         ):
             log_line(log, f"[{study}] Reusing sample checkpoint: {checkpoint_h5ad} (sample_id={sample_id})")
             trim_stats = json.loads(checkpoint_trim_json.read_text(encoding="utf-8"))
@@ -643,6 +667,8 @@ def run_tenx_h5_multi(*, study: str, study_spec: dict, output_h5ad: Path, log: T
                     "qc_cfg": qc_cfg,
                     "out_h5ad": str(checkpoint_h5ad),
                     "out_trim_json": str(checkpoint_trim_json),
+                    "out_fingerprint": str(checkpoint_fingerprint),
+                    "fingerprint": fingerprint,
                 }
             )
         elif h5ad_val:
@@ -657,6 +683,8 @@ def run_tenx_h5_multi(*, study: str, study_spec: dict, output_h5ad: Path, log: T
                     "qc_cfg": qc_cfg,
                     "out_h5ad": str(checkpoint_h5ad),
                     "out_trim_json": str(checkpoint_trim_json),
+                    "out_fingerprint": str(checkpoint_fingerprint),
+                    "fingerprint": fingerprint,
                 }
             )
         else:
