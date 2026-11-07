@@ -1,6 +1,6 @@
 # integration_annotation module
 
-Runs reference build, integration, label transfer, and evaluation. Run from `a1_p1_qc/`.
+Runs reference build, integration, label transfer, and evaluation. Run from the repository root.
 
 ## Commands
 

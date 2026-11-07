@@ -1,6 +1,6 @@
 # standardize module
 
-Converts study-specific raw inputs to canonical `raw.h5ad` files. Run from `a1_p1_qc/`.
+Converts study-specific raw inputs to canonical `raw.h5ad` files. Run from the repository root.
 
 ## Commands
 

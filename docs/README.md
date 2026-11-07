@@ -1,6 +1,6 @@
-# a1_p1_qc runbooks
+# Runbooks
 
-Run commands from `a1_p1_qc/`. Use Snakemake profiles for cores, conda, reruns, and module-local config overrides.
+Run commands from the repository root. Use Snakemake profiles for cores, conda, reruns, and module-local config overrides.
 
 | Module | Main target | Runbook |
 | --- | --- | --- |

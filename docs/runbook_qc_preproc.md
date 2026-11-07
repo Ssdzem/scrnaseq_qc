@@ -1,6 +1,6 @@
 # qc_preproc module
 
-Attaches metadata, writes pre-filter plots, filters/normalizes each study, and creates all-study pre-integration objects. Run from `a1_p1_qc/`.
+Attaches metadata, writes pre-filter plots, normalizes each study, and creates all-study pre-integration objects. Run from the repository root.
 
 ## Commands
 
@@ -18,12 +18,13 @@ snakemake --profile profiles/local -s workflow/modules/qc_preproc/Snakefile \
 
 ## Config
 
-Primary file: `config/qc.yaml`.
+Primary file: `config/qc.yaml`. Cells are filtered earlier, in standardize, through
+each study's `input.qc` block; this module does not drop cells.
 
 Important knobs:
 
 - `inputs.studies`: optional study allowlist; empty means infer from metadata.
-- `qc.min_genes`, `qc.min_counts`, `qc.max_mito_frac`: filtering thresholds.
+- `qc.hvg_n_top_genes`, `qc.hvg_batch_key`: highly variable gene selection.
 - `qc.backend`: `cpu`, `gpu`, or `auto` for RAPIDS-backed preprocessing.
 - `qc.require_gpu`: fail instead of falling back when GPU is requested.
 - `resources.*`: Snakemake threads/memory/GPU scheduling for heavy QC rules.

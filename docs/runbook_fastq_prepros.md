@@ -1,6 +1,6 @@
 # fastq_prepros module
 
-Runs CeleScope counting for configured singleton FASTQ studies. Run from `a1_p1_qc/`.
+Runs CeleScope counting for configured singleton FASTQ studies. Run from the repository root.
 
 ## Commands
 

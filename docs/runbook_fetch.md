@@ -1,7 +1,7 @@
 # fetch module
 
 Downloads files listed in `config/liver_scRNAseq_metadata_everything.csv`.
-Run from `a1_p1_qc/`.
+Run from the repository root.
 
 ## Commands
 

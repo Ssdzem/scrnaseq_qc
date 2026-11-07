@@ -1,6 +1,6 @@
-# a1_p1_qc workflow wiring
+# Workflow wiring
 
-Run from `a1_p1_qc/`. The root `Snakefile` includes:
+Run from the repository root. The root `Snakefile` includes:
 
 ```text
 fetch -> fastq_prepros -> standardize -> qc_preproc -> integration_annotation
