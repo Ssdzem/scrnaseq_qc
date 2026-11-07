@@ -10,6 +10,13 @@ input:
   qc:
     method: "mad"
     k: 3
+    # P1-STD-03 — CROSS-COHORT CAVEAT, state this in any methods section.
+    # mito_upper_k is NOT uniform across the project: GSE256398 and HRA007511 (both
+    # DISCOVERY) use 7; GSE202379, GSE244832 and all three VALIDATION cohorts
+    # (GSE136103, GSE168933, GSE181483) use 5. A larger k is a MORE PERMISSIVE
+    # mitochondrial ceiling, so two discovery studies were filtered more leniently than
+    # everything they are compared against. The divergence is deliberate per-study
+    # tuning, but it was nowhere recorded as a caveat.
     mito_upper_k: 5
     mito_gene_prefix: "MT-"
     miqc_posterior_cutoff: 0.75
