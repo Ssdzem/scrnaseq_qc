@@ -308,4 +308,3 @@ dependencies:
       - xarray==2026.4.0
       - yarl==1.23.0
       - zipp==3.23.1
-prefix: /scratch/home/esosa/miniforge3/envs/integration_annotation_py
