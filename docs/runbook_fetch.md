@@ -34,7 +34,7 @@ snakemake --profile profiles/local -s workflow/modules/fetch/Snakefile \
 > This matters beyond the runbook: `standardize.smk:138-139` returns
 > `out/{study}/.fetch_done` as the fetch dependency for any study whose inputs sit under
 > `out/<study>/raw` or `/qconly`, so `snakemake out/GSE202379/raw.h5ad` satisfies its
-> fetch dependency **without fetching**. The validation profile escapes it, because
+> fetch dependency **without fetching**. Studies listed in a profile's `extract:` map escape it, because
 > `fetch_done_data`'s wildcard constraint (`fetch.smk:314`) excludes `extract:` studies.
 >
 > **Still open.** The fix is a code change (make `OUT_ROOT` relative, or drop

@@ -1,8 +1,0 @@
-cores: 40
-printshellcmds: true
-rerun-incomplete: true
-keep-going: true
-use-conda: true
-conda-frontend: conda
-config:
-  - profile_config_dir=profiles/newint

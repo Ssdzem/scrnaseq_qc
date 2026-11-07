@@ -187,7 +187,7 @@ TRIPLES_BY_STUDY_FASTQS = {
 
 # Studies whose downloaded GEO `*_RAW.tar` must be unpacked into a cleaner-ready
 # layout before standardize can run. Driven entirely by the `extract:` config
-# map (set per profile, e.g. profiles/validation/fetch.yaml):
+# map (set per profile, in its fetch.yaml):
 #
 #   extract:
 #     GSE136103: triplet   # per-sample 10x triplets

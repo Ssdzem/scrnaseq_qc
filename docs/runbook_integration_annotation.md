@@ -13,9 +13,6 @@ snakemake --profile profiles/lca_tier_1_cpu_sysvi_scanvi -s workflow/modules/int
 
 # tier-2 GPU profile
 snakemake --profile profiles/lca_tier_2_gpu_sysvi_scanvi -s workflow/modules/integration_annotation/Snakefile integration_annotation_all
-
-# a1_p2 macrophage/DC reintegration profile
-snakemake --profile profiles/newint -s workflow/modules/integration_annotation/Snakefile integration_annotation_all
 ```
 
 ## Config
@@ -43,10 +40,3 @@ out/integration_annotation/all_studies/all_annotated.h5ad
 out/integration_annotation/all_studies/evaluation_metrics.json
 ```
 
-With `profiles/newint`, outputs redirect to:
-
-```text
-../a1_p2_def/out/trimint/all_integrated.h5ad
-../a1_p2_def/out/trimint/all_annotated.h5ad
-../a1_p2_def/out/trimint/evaluation_metrics.json
-```

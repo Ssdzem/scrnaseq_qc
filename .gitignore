@@ -5,3 +5,16 @@ logs/
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
+
+# Run profiles belong to the project that runs this code, not to this repository.
+# Only templates are tracked; a new one must be added here on purpose.
+profiles/*
+!profiles/README.md
+!profiles/local/
+!profiles/lca_tier_1_cpu_sysvi_scanvi/
+!profiles/lca_tier_2_gpu_sysvi_scanvi/
+
+# AI agent/tooling state — machine-specific, never tracked.
+.claude/
+.codex/
+.omx/
